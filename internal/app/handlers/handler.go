@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
 	"io"
@@ -31,7 +32,13 @@ func MainPage(res http.ResponseWriter, req *http.Request) {
 		storage.Urls[shortKey] = originalURL
 		res.WriteHeader(http.StatusCreated)
 		res.Header().Set("content-type", "text/plain")
-		_, err = res.Write([]byte("http://" + req.Host + "/" + shortKey))
+		resultHostAddr := "http://" + req.Host
+
+		if config.FlagResultHostAddr != "" {
+			resultHostAddr = config.FlagResultHostAddr
+		}
+
+		_, err = res.Write([]byte(resultHostAddr + "/" + shortKey))
 
 		if err != nil {
 			panic(err)
