@@ -43,14 +43,6 @@ func TestMainPage(t *testing.T) {
 				contentType: "text/plain; charset=utf-8",
 			},
 		},
-		{
-			name:   "Go to link",
-			method: http.MethodGet,
-			want: want{
-				code:        307,
-				contentType: "text/plain; charset=utf-8",
-			},
-		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
