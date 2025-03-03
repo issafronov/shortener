@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,9 @@ func init() {
 }
 
 func TestMainPage(t *testing.T) {
-	handler := http.HandlerFunc(handlers.MainPage)
+	conf := config.LoadConfig()
+	h := handlers.NewHandler(conf)
+	handler := http.HandlerFunc(h.MainPage)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 

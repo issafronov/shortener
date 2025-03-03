@@ -16,7 +16,7 @@ func LoadConfig() *Config {
 }
 
 func ParseFlags(config *Config) {
-	flag.StringVar(&config.Address, "a", "localhost:8080", "address and port to run server")
+	flag.StringVar(&config.Address, "a", ":8080", "address and port to run server")
 	flag.StringVar(&config.BaseURL, "b", "http://127.0.0.1:8080", "address and port to run server")
 	flag.Parse()
 }
