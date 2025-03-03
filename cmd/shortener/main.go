@@ -6,24 +6,34 @@ import (
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"net/http"
+	"os"
 )
 
 func main() {
-	config.ParseFlags()
+	// первый аргумент — имя запущенного файла
+	fmt.Printf("Command: %v\n", os.Args[0])
+	// выведем остальные параметры
+	for i, v := range os.Args[1:] {
+		fmt.Println(i+1, v)
+	}
 
-	if err := runServer(); err != nil {
+	conf := config.LoadConfig()
+
+	if err := runServer(conf); err != nil {
 		panic(err)
 	}
 }
 
-func Router() chi.Router {
+func Router(config *config.Config) chi.Router {
 	router := chi.NewRouter()
-	router.Get("/{key}", handlers.MainPage)
-	router.Post("/", handlers.MainPage)
+	handler := handlers.NewHandler(config)
+	router.Get("/{key}", handler.MainPage)
+	router.Post("/", handler.MainPage)
 	return router
 }
 
-func runServer() error {
-	fmt.Println("Running server on", config.FlagRunAddr)
-	return http.ListenAndServe(config.FlagRunAddr, Router())
+func runServer(config *config.Config) error {
+	fmt.Println("Starting server...", config)
+	fmt.Println("Running server on", config.Address)
+	return http.ListenAndServe(config.Address, Router(config))
 }

@@ -13,7 +13,15 @@ const (
 	shortKeyLength = 8
 )
 
-func MainPage(res http.ResponseWriter, req *http.Request) {
+type Handler struct {
+	config *config.Config
+}
+
+func NewHandler(config *config.Config) *Handler {
+	return &Handler{config: config}
+}
+
+func (h Handler) MainPage(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
 		body, err := io.ReadAll(req.Body)
 
@@ -34,8 +42,8 @@ func MainPage(res http.ResponseWriter, req *http.Request) {
 		res.Header().Set("content-type", "text/plain")
 		resultHostAddr := "http://" + req.Host
 
-		if config.FlagResultHostAddr != "" {
-			resultHostAddr = config.FlagResultHostAddr
+		if h.config.BaseURL != "" {
+			resultHostAddr = h.config.BaseURL
 		}
 
 		_, err = res.Write([]byte(resultHostAddr + "/" + shortKey))
