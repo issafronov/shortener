@@ -22,7 +22,7 @@ func init() {
 func TestMainPage(t *testing.T) {
 	conf := config.LoadConfig()
 	h := handlers.NewHandler(conf)
-	handler := http.HandlerFunc(h.MainPage)
+	handler := http.HandlerFunc(h.CreateLinkHandle)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 

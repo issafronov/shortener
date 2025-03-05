@@ -19,13 +19,12 @@ func main() {
 func Router(config *config.Config) chi.Router {
 	router := chi.NewRouter()
 	handler := handlers.NewHandler(config)
-	router.Get("/{key}", handler.MainPage)
-	router.Post("/", handler.MainPage)
+	router.Get("/{key}", handler.GetLinkHandle)
+	router.Post("/", handler.CreateLinkHandle)
 	return router
 }
 
 func runServer(config *config.Config) error {
-	fmt.Println("Starting server...", config)
 	fmt.Println("Running server on", config.ServerAddress)
 	return http.ListenAndServe(config.ServerAddress, Router(config))
 }
