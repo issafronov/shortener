@@ -6,16 +6,9 @@ import (
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"net/http"
-	"os"
 )
 
 func main() {
-	// выведем параметры с которыми запущен сервер
-	fmt.Printf("Command: %v\n", os.Args[0])
-	for i, v := range os.Args[1:] {
-		fmt.Println(i+1, v)
-	}
-
 	conf := config.LoadConfig()
 
 	if err := runServer(conf); err != nil {
@@ -26,13 +19,12 @@ func main() {
 func Router(config *config.Config) chi.Router {
 	router := chi.NewRouter()
 	handler := handlers.NewHandler(config)
-	router.Get("/{key}", handler.MainPage)
-	router.Post("/", handler.MainPage)
+	router.Get("/{key}", handler.GetLinkHandle)
+	router.Post("/", handler.CreateLinkHandle)
 	return router
 }
 
 func runServer(config *config.Config) error {
-	fmt.Println("Starting server...", config)
-	fmt.Println("Running server on", config.Address)
-	return http.ListenAndServe(config.Address, Router(config))
+	fmt.Println("Running server on", config.ServerAddress)
+	return http.ListenAndServe(config.ServerAddress, Router(config))
 }
