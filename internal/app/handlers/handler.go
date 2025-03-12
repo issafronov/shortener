@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"github.com/go-chi/chi/v5"
+	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
 	"io"
 	"net/http"
@@ -9,8 +11,6 @@ import (
 const (
 	shortKeyLength = 8
 )
-
-var urls = make(map[string]string)
 
 func MainPage(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
@@ -28,10 +28,10 @@ func MainPage(res http.ResponseWriter, req *http.Request) {
 		}
 
 		shortKey := utils.CreateShortKey(shortKeyLength)
-		urls[shortKey] = originalURL
+		storage.Urls[shortKey] = originalURL
 		res.WriteHeader(http.StatusCreated)
 		res.Header().Set("content-type", "text/plain")
-		_, err = res.Write([]byte("http://localhost:8080/" + shortKey))
+		_, err = res.Write([]byte("http://" + req.Host + "/" + shortKey))
 
 		if err != nil {
 			panic(err)
@@ -44,7 +44,8 @@ func MainPage(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	link, ok := urls[req.URL.Path[1:]]
+	key := chi.URLParam(req, "key")
+	link, ok := storage.Urls[key]
 
 	if !ok {
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
