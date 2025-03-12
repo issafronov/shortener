@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
 	"io"
@@ -12,7 +13,15 @@ const (
 	shortKeyLength = 8
 )
 
-func MainPage(res http.ResponseWriter, req *http.Request) {
+type Handler struct {
+	config *config.Config
+}
+
+func NewHandler(config *config.Config) *Handler {
+	return &Handler{config: config}
+}
+
+func (h Handler) MainPage(res http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
 		body, err := io.ReadAll(req.Body)
 
@@ -31,7 +40,13 @@ func MainPage(res http.ResponseWriter, req *http.Request) {
 		storage.Urls[shortKey] = originalURL
 		res.WriteHeader(http.StatusCreated)
 		res.Header().Set("content-type", "text/plain")
-		_, err = res.Write([]byte("http://" + req.Host + "/" + shortKey))
+		resultHostAddr := "http://" + req.Host
+
+		if h.config.BaseURL != "" {
+			resultHostAddr = h.config.BaseURL
+		}
+
+		_, err = res.Write([]byte(resultHostAddr + "/" + shortKey))
 
 		if err != nil {
 			panic(err)
