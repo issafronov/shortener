@@ -8,6 +8,7 @@ import (
 type Config struct {
 	ServerAddress string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
 	BaseURL       string `env:"BASE_URL" envDefault:"http://localhost:8080"`
+	LoggerLevel   string `env:"LOG_LEVEL" envDefault:"info"`
 }
 
 func LoadConfig() *Config {
@@ -26,5 +27,6 @@ func LoadConfig() *Config {
 func ParseFlags(config *Config) {
 	flag.StringVar(&config.ServerAddress, "a", config.ServerAddress, "address and port to run server")
 	flag.StringVar(&config.BaseURL, "b", config.BaseURL, "address and port to link")
+	flag.StringVar(&config.LoggerLevel, "l", config.LoggerLevel, "log level")
 	flag.Parse()
 }

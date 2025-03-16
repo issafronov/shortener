@@ -5,6 +5,8 @@ import (
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
+	"github.com/issafronov/shortener/internal/logger"
+	"go.uber.org/zap"
 	"io"
 	"net/http"
 )
@@ -25,16 +27,19 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	body, err := io.ReadAll(req.Body)
 
 	if err != nil {
-		panic(err)
+		logger.Log.Info("Error reading body", zap.Error(err))
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 	}
 
 	originalURL := string(body)
+	logger.Log.Info("CreateLinkHandle", zap.String("originalURL", originalURL))
 
 	if originalURL == "" {
+		logger.Log.Info("Empty originalURL")
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	
+
 	shortKey := utils.CreateShortKey(shortKeyLength)
 	storage.Urls[shortKey] = originalURL
 	res.WriteHeader(http.StatusCreated)
@@ -48,17 +53,23 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	_, err = res.Write([]byte(resultHostAddr + "/" + shortKey))
 
 	if err != nil {
-		panic(err)
+		logger.Log.Info("Error writing response", zap.Error(err))
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
 	}
 }
 
 func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
+	logger.Log.Info("GetLinkHandle", zap.String("url", req.URL.String()))
 	key := chi.URLParam(req, "key")
 	link, ok := storage.Urls[key]
 
 	if !ok {
+		logger.Log.Info("Link not found", zap.String("key", key))
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
 	}
 
+	logger.Log.Info("Link found", zap.String("key", key))
 	http.Redirect(res, req, link, http.StatusTemporaryRedirect)
 }
