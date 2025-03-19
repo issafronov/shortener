@@ -24,10 +24,11 @@ func Router(config *config.Config) chi.Router {
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
 		panic(err)
 	}
-	
+
 	router.Use(logger.RequestLogger)
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
+	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
 	return router
 }
 
