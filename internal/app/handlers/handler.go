@@ -78,7 +78,7 @@ func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
 
 func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Request) {
 	logger.Log.Debug("decoding request")
-	var urlData models.UrlData
+	var urlData models.URLData
 	dec := json.NewDecoder(req.Body)
 
 	if err := dec.Decode(&urlData); err != nil {
@@ -87,7 +87,7 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
-	originalURL := urlData.Url
+	originalURL := urlData.URL
 	logger.Log.Info("CreateLinkHandle", zap.String("originalURL", originalURL))
 
 	if originalURL == "" {
@@ -104,7 +104,7 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 		resultHostAddr = h.config.BaseURL
 	}
 
-	shortUrlData := models.ShortURLData{
+	shortURLData := models.ShortURLData{
 		Result: resultHostAddr + "/" + shortKey,
 	}
 
@@ -113,7 +113,7 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 
 	enc := json.NewEncoder(res)
 
-	if err := enc.Encode(shortUrlData); err != nil {
+	if err := enc.Encode(shortURLData); err != nil {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
