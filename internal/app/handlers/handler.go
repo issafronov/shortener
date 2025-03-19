@@ -104,7 +104,7 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 		resultHostAddr = h.config.BaseURL
 	}
 
-	shortUrlData := models.ShortUrlData{
+	shortUrlData := models.ShortURLData{
 		Result: resultHostAddr + "/" + shortKey,
 	}
 

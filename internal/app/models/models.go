@@ -1,9 +1,9 @@
 package models
 
-type UrlData struct {
-	Url string `json:"url"`
+type URLData struct {
+	URL string `json:"url"`
 }
 
-type ShortUrlData struct {
+type ShortURLData struct {
 	Result string `json:"result"`
 }
