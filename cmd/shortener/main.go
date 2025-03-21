@@ -27,7 +27,7 @@ func Router(config *config.Config) chi.Router {
 	}
 
 	router.Use(logger.RequestLogger)
-	router.Use(compress.CompressMiddleware)
+	router.Use(compress.GzipMiddleware)
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)

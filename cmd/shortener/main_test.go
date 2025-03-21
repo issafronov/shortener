@@ -120,7 +120,7 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 func TestGzipCompression(t *testing.T) {
 	conf := &config.Config{}
 	h := handlers.NewHandler(conf)
-	handler := compress.CompressMiddleware(http.HandlerFunc(h.CreateJSONLinkHandle))
+	handler := compress.GzipMiddleware(http.HandlerFunc(h.CreateJSONLinkHandle))
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
