@@ -7,7 +7,7 @@ import (
 	"github.com/issafronov/shortener/internal/app/models"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
-	"github.com/issafronov/shortener/internal/logger"
+	"github.com/issafronov/shortener/internal/middleware/logger"
 	"go.uber.org/zap"
 	"io"
 	"net/http"

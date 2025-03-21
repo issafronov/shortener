@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
+	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,4 +115,56 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 			assert.Equal(t, test.contentType, res.Header().Get("Content-Type"))
 		})
 	}
+}
+
+func TestGzipCompression(t *testing.T) {
+	conf := &config.Config{}
+	h := handlers.NewHandler(conf)
+	handler := compress.CompressMiddleware(http.HandlerFunc(h.CreateJSONLinkHandle))
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	requestBody := `{"url": "https://www.google.com"}`
+
+	t.Run("sends_gzip", func(t *testing.T) {
+		buf := bytes.NewBuffer(nil)
+		zb := gzip.NewWriter(buf)
+		_, err := zb.Write([]byte(requestBody))
+		require.NoError(t, err)
+		err = zb.Close()
+		require.NoError(t, err)
+
+		r := httptest.NewRequest("POST", srv.URL, buf)
+		r.RequestURI = ""
+		r.Header.Set("Content-Encoding", "gzip")
+		r.Header.Set("Accept-Encoding", "")
+
+		resp, err := http.DefaultClient.Do(r)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		_, err = io.ReadAll(resp.Body)
+		defer resp.Body.Close()
+
+		require.NoError(t, err)
+	})
+
+	t.Run("accepts_gzip", func(t *testing.T) {
+		buf := bytes.NewBufferString(requestBody)
+		r := httptest.NewRequest("POST", srv.URL, buf)
+		r.RequestURI = ""
+		r.Header.Set("Accept-Encoding", "gzip")
+
+		resp, err := http.DefaultClient.Do(r)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		defer resp.Body.Close()
+
+		zr, err := gzip.NewReader(resp.Body)
+		require.NoError(t, err)
+
+		_, err = io.ReadAll(zr)
+		require.NoError(t, err)
+	})
 }

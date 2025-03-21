@@ -5,7 +5,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
-	"github.com/issafronov/shortener/internal/logger"
+	"github.com/issafronov/shortener/internal/middleware/compress"
+	"github.com/issafronov/shortener/internal/middleware/logger"
 	"net/http"
 )
 
@@ -26,6 +27,7 @@ func Router(config *config.Config) chi.Router {
 	}
 
 	router.Use(logger.RequestLogger)
+	router.Use(compress.CompressMiddleware)
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
