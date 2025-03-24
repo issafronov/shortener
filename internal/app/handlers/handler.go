@@ -83,6 +83,7 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
+	storage.Urls[shortKey] = originalURL
 
 	uuid := len(storage.Urls) + 1
 
