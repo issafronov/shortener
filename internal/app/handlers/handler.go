@@ -3,7 +3,6 @@ package handlers
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/models"
@@ -27,12 +26,6 @@ type Handler struct {
 	reader *bufio.Reader
 }
 
-type ShortenerURL struct {
-	UUID        int    `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
-
 func NewHandler(config *config.Config) (*Handler, error) {
 	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -46,7 +39,7 @@ func NewHandler(config *config.Config) (*Handler, error) {
 	}, nil
 }
 
-func (h *Handler) WriteURL(url ShortenerURL) error {
+func (h *Handler) WriteURL(url storage.ShortenerURL) error {
 	logger.Log.Info("Writing URL", zap.String("url", url.ShortURL))
 	data, err := json.Marshal(url)
 
@@ -66,20 +59,6 @@ func (h *Handler) WriteURL(url ShortenerURL) error {
 	}
 
 	return h.writer.Flush()
-}
-
-func (h *Handler) GetUUID() int {
-	counter := 0
-	for i := 1; ; i++ {
-		line, err := h.reader.ReadBytes('\n')
-		fmt.Printf("[line:%d pos:%d] %q\n", i, counter, line)
-		if err != nil {
-			break
-		}
-		counter += len(line)
-	}
-
-	return counter + 1
 }
 
 func (h *Handler) Close() error {
@@ -105,9 +84,9 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
 
-	uuid := h.GetUUID()
+	uuid := len(storage.Urls) + 1
 
-	shortenerURL := &ShortenerURL{
+	shortenerURL := &storage.ShortenerURL{
 		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
@@ -172,9 +151,10 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	uuid := h.GetUUID()
+	storage.Urls[shortKey] = originalURL
+	uuid := len(storage.Urls) + 1
 
-	shortenerURL := &ShortenerURL{
+	shortenerURL := &storage.ShortenerURL{
 		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
