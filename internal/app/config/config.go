@@ -9,7 +9,7 @@ type Config struct {
 	ServerAddress   string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
 	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
 	LoggerLevel     string `env:"LOG_LEVEL" envDefault:"info"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"storage.json"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"internal/app/storage/storage.json"`
 }
 
 func LoadConfig() *Config {
