@@ -20,10 +20,15 @@ func main() {
 
 func Router(config *config.Config) chi.Router {
 	router := chi.NewRouter()
-	handler := handlers.NewHandler(config)
 
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
 		panic(err)
+	}
+
+	handler, err := handlers.NewHandler(config)
+	
+	if err != nil {
+		logger.Log.Info("Failed to initialize handler")
 	}
 
 	router.Use(logger.RequestLogger)

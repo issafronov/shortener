@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"bufio"
 	"encoding/json"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/models"
@@ -11,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"os"
 )
 
 const (
@@ -19,10 +22,68 @@ const (
 
 type Handler struct {
 	config *config.Config
+	file   *os.File
+	writer *bufio.Writer
+	reader *bufio.Reader
 }
 
-func NewHandler(config *config.Config) *Handler {
-	return &Handler{config: config}
+type ShortenerURL struct {
+	UUID        int    `json:"uuid"`
+	ShortURL    string `json:"short_url"`
+	OriginalURL string `json:"original_url"`
+}
+
+func NewHandler(config *config.Config) (*Handler, error) {
+	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, err
+	}
+	return &Handler{
+		config: config,
+		file:   file,
+		writer: bufio.NewWriter(file),
+		reader: bufio.NewReader(file),
+	}, nil
+}
+
+func (h *Handler) WriteURL(url ShortenerURL) error {
+	logger.Log.Info("Writing URL", zap.String("url", url.ShortURL))
+	data, err := json.Marshal(url)
+
+	if err != nil {
+		logger.Log.Info("Failed to marshal shortener URL", zap.Error(err))
+		return err
+	}
+
+	if _, err := h.writer.Write(data); err != nil {
+		logger.Log.Info("Failed to write URL", zap.String("url", url.ShortURL), zap.Error(err))
+		return err
+	}
+
+	if err := h.writer.WriteByte('\n'); err != nil {
+		logger.Log.Info("Error writing data new line", zap.Error(err))
+		return err
+	}
+
+	return h.writer.Flush()
+}
+
+func (h *Handler) GetUUID() int {
+	counter := 0
+	for i := 1; ; i++ {
+		line, err := h.reader.ReadBytes('\n')
+		fmt.Printf("[line:%d pos:%d] %q\n", i, counter, line)
+		if err != nil {
+			break
+		}
+		counter += len(line)
+	}
+
+	return counter + 1
+}
+
+func (h *Handler) Close() error {
+	return h.file.Close()
 }
 
 func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
@@ -43,7 +104,21 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	storage.Urls[shortKey] = originalURL
+
+	uuid := h.GetUUID()
+
+	shortenerURL := &ShortenerURL{
+		UUID:        uuid,
+		ShortURL:    shortKey,
+		OriginalURL: originalURL,
+	}
+
+	if err := h.WriteURL(*shortenerURL); err != nil {
+		logger.Log.Info("Failed to write shortener URL", zap.Error(err))
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	res.Header().Set("Content-Type", "text/plain")
 	res.WriteHeader(http.StatusCreated)
 	resultHostAddr := "http://" + req.Host
@@ -97,7 +172,20 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	storage.Urls[shortKey] = originalURL
+	uuid := h.GetUUID()
+
+	shortenerURL := &ShortenerURL{
+		UUID:        uuid,
+		ShortURL:    shortKey,
+		OriginalURL: originalURL,
+	}
+
+	if err := h.WriteURL(*shortenerURL); err != nil {
+		logger.Log.Info("Failed to write shortener URL", zap.Error(err))
+		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	resultHostAddr := "http://" + req.Host
 
 	if h.config.BaseURL != "" {

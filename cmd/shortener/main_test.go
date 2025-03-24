@@ -25,7 +25,11 @@ func init() {
 
 func TestCreateLinkHandle(t *testing.T) {
 	conf := &config.Config{}
-	h := handlers.NewHandler(conf)
+	conf.FileStoragePath = "testStorage.json"
+	h, err := handlers.NewHandler(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := http.HandlerFunc(h.CreateLinkHandle)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -78,7 +82,11 @@ func TestCreateLinkHandle(t *testing.T) {
 
 func TestCreateJSONLinkHandle(t *testing.T) {
 	conf := &config.Config{}
-	h := handlers.NewHandler(conf)
+	conf.FileStoragePath = "testStorage.json"
+	h, err := handlers.NewHandler(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := http.HandlerFunc(h.CreateJSONLinkHandle)
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
@@ -119,7 +127,11 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 
 func TestGzipCompression(t *testing.T) {
 	conf := &config.Config{}
-	h := handlers.NewHandler(conf)
+	conf.FileStoragePath = "testStorage.json"
+	h, err := handlers.NewHandler(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := compress.GzipMiddleware(http.HandlerFunc(h.CreateJSONLinkHandle))
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
