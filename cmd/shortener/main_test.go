@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"database/sql"
 	"fmt"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
@@ -26,7 +27,8 @@ func init() {
 func TestCreateLinkHandle(t *testing.T) {
 	conf := &config.Config{}
 	conf.FileStoragePath = "testStorage.json"
-	h, err := handlers.NewHandler(conf)
+	db := sql.DB{}
+	h, err := handlers.NewHandler(conf, &db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +85,8 @@ func TestCreateLinkHandle(t *testing.T) {
 func TestCreateJSONLinkHandle(t *testing.T) {
 	conf := &config.Config{}
 	conf.FileStoragePath = "testStorage.json"
-	h, err := handlers.NewHandler(conf)
+	db := sql.DB{}
+	h, err := handlers.NewHandler(conf, &db)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +131,8 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 func TestGzipCompression(t *testing.T) {
 	conf := &config.Config{}
 	conf.FileStoragePath = "testStorage.json"
-	h, err := handlers.NewHandler(conf)
+	db := sql.DB{}
+	h, err := handlers.NewHandler(conf, &db)
 	if err != nil {
 		t.Fatal(err)
 	}
