@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
@@ -24,9 +25,10 @@ type Handler struct {
 	file   *os.File
 	writer *bufio.Writer
 	reader *bufio.Reader
+	db     *sql.DB
 }
 
-func NewHandler(config *config.Config) (*Handler, error) {
+func NewHandler(config *config.Config, db *sql.DB) (*Handler, error) {
 	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
@@ -36,6 +38,7 @@ func NewHandler(config *config.Config) (*Handler, error) {
 		file:   file,
 		writer: bufio.NewWriter(file),
 		reader: bufio.NewReader(file),
+		db:     db,
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
@@ -10,6 +11,7 @@ import (
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
+	_ "github.com/jackc/pgx/stdlib"
 	"net/http"
 	"os"
 )
@@ -17,22 +19,28 @@ import (
 func main() {
 	conf := config.LoadConfig()
 
+	db, err := sql.Open("pgx", conf.DatabaseDSN)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
 	if err := restoreStorage(conf); err != nil {
 		panic(err)
 	}
-	if err := runServer(conf); err != nil {
+	if err := runServer(conf, db); err != nil {
 		panic(err)
 	}
 }
 
-func Router(config *config.Config) chi.Router {
+func Router(config *config.Config, db *sql.DB) chi.Router {
 	router := chi.NewRouter()
 
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
 		panic(err)
 	}
 
-	handler, err := handlers.NewHandler(config)
+	handler, err := handlers.NewHandler(config, db)
 
 	if err != nil {
 		logger.Log.Info("Failed to initialize handler")
@@ -43,12 +51,13 @@ func Router(config *config.Config) chi.Router {
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
+	router.Get("/ping", handler.Ping)
 	return router
 }
 
-func runServer(config *config.Config) error {
+func runServer(config *config.Config, db *sql.DB) error {
 	fmt.Println("Running server on", config.ServerAddress)
-	return http.ListenAndServe(config.ServerAddress, Router(config))
+	return http.ListenAndServe(config.ServerAddress, Router(config, db))
 }
 
 func restoreStorage(config *config.Config) error {
