@@ -89,12 +89,11 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
 	logger.Log.Info("GetLinkHandle", zap.String("url", req.URL.String()))
 	key := chi.URLParam(req, "key")
-	link, ok := storage.Urls[key]
+	link, err := h.storage.Get(req.Context(), key)
 
-	if !ok {
-		logger.Log.Info("Link not found", zap.String("key", key))
+	if err != nil {
+		logger.Log.Info("Error getting link", zap.String("key", key), zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
-		return
 	}
 
 	logger.Log.Info("Link found", zap.String("key", key))

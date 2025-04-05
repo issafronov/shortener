@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"go.uber.org/zap"
@@ -21,6 +22,7 @@ type ShortenerURL struct {
 
 type Storage interface {
 	Create(ctx context.Context, url ShortenerURL) error
+	Get(ctx context.Context, url string) (string, error)
 	Ping(ctx context.Context) error
 }
 
@@ -49,6 +51,14 @@ func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) error {
 		return err
 	}
 	return f.writer.Flush()
+}
+
+func (f *FileStorage) Get(ctx context.Context, url string) (string, error) {
+	link, ok := Urls[url]
+	if !ok {
+		return "", errors.New("url not found")
+	}
+	return link, nil
 }
 
 func NewFileStorage(config *config.Config) (*FileStorage, error) {
@@ -80,8 +90,8 @@ func NewPostgresStorage(ctx context.Context, dsn string) (*PostgresStorage, erro
 	createTableQuery := `
 	CREATE TABLE IF NOT EXISTS urls (
 	   id SERIAL PRIMARY KEY,
-	   short_url TEXT NOT NULL UNIQUE,
-	   original_url TEXT NOT NULL UNIQUE
+	   short_url TEXT NOT NULL,
+	   original_url TEXT NOT NULL
 	);
 	`
 
@@ -97,5 +107,34 @@ func (s *PostgresStorage) Ping(ctx context.Context) error {
 }
 
 func (s *PostgresStorage) Create(ctx context.Context, url ShortenerURL) error {
+	query := `
+	INSERT INTO urls (
+	    short_url,
+	    original_url
+	    )
+	VALUES ($1, $2)
+	`
+	_, err := s.db.ExecContext(ctx, query, url.ShortURL, url.OriginalURL)
+
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (s *PostgresStorage) Get(ctx context.Context, url string) (string, error) {
+	var originalURL string
+	err := s.db.QueryRowContext(
+		ctx,
+		"SELECT original_url FROM urls WHERE short_url = $1",
+		url,
+	).Scan(&originalURL)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", errors.New("url not found")
+		}
+		return "", err
+	}
+	return originalURL, nil
 }
