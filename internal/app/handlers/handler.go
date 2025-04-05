@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
-	"os"
 )
 
 const (
@@ -21,50 +20,19 @@ const (
 
 type Handler struct {
 	config  *config.Config
-	file    *os.File
-	writer  *bufio.Writer
-	reader  *bufio.Reader
 	storage storage.Storage
 }
 
 func NewHandler(config *config.Config, s storage.Storage) (*Handler, error) {
-	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
-	if err != nil {
-		return nil, err
-	}
 	return &Handler{
 		config:  config,
-		file:    file,
-		writer:  bufio.NewWriter(file),
-		reader:  bufio.NewReader(file),
 		storage: s,
 	}, nil
 }
 
-func (h *Handler) WriteURL(url storage.ShortenerURL) error {
+func (h *Handler) WriteURL(ctx context.Context, url storage.ShortenerURL) error {
 	logger.Log.Info("Writing URL", zap.String("url", url.ShortURL))
-	data, err := json.Marshal(url)
-
-	if err != nil {
-		logger.Log.Info("Failed to marshal shortener URL", zap.Error(err))
-		return err
-	}
-
-	if _, err := h.writer.Write(data); err != nil {
-		logger.Log.Info("Failed to write URL", zap.String("url", url.ShortURL), zap.Error(err))
-		return err
-	}
-
-	if err := h.writer.WriteByte('\n'); err != nil {
-		logger.Log.Info("Error writing data new line", zap.Error(err))
-		return err
-	}
-
-	return h.writer.Flush()
-}
-
-func (h *Handler) Close() error {
-	return h.file.Close()
+	return h.storage.Create(ctx, url)
 }
 
 func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
@@ -95,7 +63,7 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 		OriginalURL: originalURL,
 	}
 
-	if err := h.WriteURL(*shortenerURL); err != nil {
+	if err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
 		logger.Log.Info("Failed to write shortener URL", zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -163,7 +131,7 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 		OriginalURL: originalURL,
 	}
 
-	if err := h.WriteURL(*shortenerURL); err != nil {
+	if err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
 		logger.Log.Info("Failed to write shortener URL", zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return

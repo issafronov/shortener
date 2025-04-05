@@ -10,7 +10,7 @@ type Config struct {
 	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
 	LoggerLevel     string `env:"LOG_LEVEL" envDefault:"info"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"internal/app/storage/storage.json"`
-	DatabaseDSN     string `env:"DATABASE_DSN" envDefault:"postgres://user:password@localhost:5432/postgres?sslmode=disable"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 }
 
 func LoadConfig() *Config {

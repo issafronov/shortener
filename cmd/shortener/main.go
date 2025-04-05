@@ -54,13 +54,25 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	return router
 }
 
-func runServer(config *config.Config, ctx context.Context) error {
-	fmt.Println("Running server on", config.ServerAddress)
-	s, err := storage.NewPostgresStorage(ctx, config.DatabaseDSN)
-	if err != nil {
-		panic(err)
+func runServer(cfg *config.Config, ctx context.Context) error {
+	fmt.Println("Running server on", cfg.ServerAddress)
+	var s storage.Storage
+	if cfg.DatabaseDSN != "" {
+		pgStorage, err := storage.NewPostgresStorage(ctx, cfg.DatabaseDSN)
+		if err != nil {
+			fmt.Println("Failed to connect to database")
+			fileStorage, err := storage.NewFileStorage(cfg)
+			if err != nil {
+				return err
+			}
+			s = fileStorage
+		} else {
+			s = pgStorage
+		}
+	} else {
+		s, _ = storage.NewFileStorage(cfg)
 	}
-	return http.ListenAndServe(config.ServerAddress, Router(config, s))
+	return http.ListenAndServe(cfg.ServerAddress, Router(cfg, s))
 }
 
 func restoreStorage(config *config.Config) error {
