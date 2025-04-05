@@ -2,10 +2,11 @@ package main
 
 import (
 	"bufio"
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
@@ -14,33 +15,30 @@ import (
 	_ "github.com/jackc/pgx/stdlib"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	conf := config.LoadConfig()
-
-	db, err := sql.Open("pgx", conf.DatabaseDSN)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
 
 	if err := restoreStorage(conf); err != nil {
 		panic(err)
 	}
-	if err := runServer(conf, db); err != nil {
+	if err := runServer(conf, ctx); err != nil {
 		panic(err)
 	}
 }
 
-func Router(config *config.Config, db *sql.DB) chi.Router {
+func Router(config *config.Config, s storage.Storage) chi.Router {
 	router := chi.NewRouter()
 
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
 		panic(err)
 	}
 
-	handler, err := handlers.NewHandler(config, db)
+	handler, err := handlers.NewHandler(config, s)
 
 	if err != nil {
 		logger.Log.Info("Failed to initialize handler")
@@ -48,6 +46,7 @@ func Router(config *config.Config, db *sql.DB) chi.Router {
 
 	router.Use(logger.RequestLogger)
 	router.Use(compress.GzipMiddleware)
+	router.Use(middleware.Timeout(60 * time.Second))
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
@@ -55,9 +54,13 @@ func Router(config *config.Config, db *sql.DB) chi.Router {
 	return router
 }
 
-func runServer(config *config.Config, db *sql.DB) error {
+func runServer(config *config.Config, ctx context.Context) error {
 	fmt.Println("Running server on", config.ServerAddress)
-	return http.ListenAndServe(config.ServerAddress, Router(config, db))
+	s, err := storage.NewPostgresStorage(ctx, config.DatabaseDSN)
+	if err != nil {
+		panic(err)
+	}
+	return http.ListenAndServe(config.ServerAddress, Router(config, s))
 }
 
 func restoreStorage(config *config.Config) error {

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bufio"
-	"database/sql"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
@@ -21,24 +20,24 @@ const (
 )
 
 type Handler struct {
-	config *config.Config
-	file   *os.File
-	writer *bufio.Writer
-	reader *bufio.Reader
-	db     *sql.DB
+	config  *config.Config
+	file    *os.File
+	writer  *bufio.Writer
+	reader  *bufio.Reader
+	storage storage.Storage
 }
 
-func NewHandler(config *config.Config, db *sql.DB) (*Handler, error) {
+func NewHandler(config *config.Config, s storage.Storage) (*Handler, error) {
 	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, err
 	}
 	return &Handler{
-		config: config,
-		file:   file,
-		writer: bufio.NewWriter(file),
-		reader: bufio.NewReader(file),
-		db:     db,
+		config:  config,
+		file:    file,
+		writer:  bufio.NewWriter(file),
+		reader:  bufio.NewReader(file),
+		storage: s,
 	}, nil
 }
 
