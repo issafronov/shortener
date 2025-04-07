@@ -66,7 +66,8 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 
 	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
-			http.Error(res, http.StatusText(http.StatusConflict), http.StatusConflict)
+			res.Header().Set("Content-Type", "text/plain")
+			res.WriteHeader(http.StatusConflict)
 			resultHostAddr := "http://" + req.Host
 			if h.config.BaseURL != "" {
 				resultHostAddr = h.config.BaseURL
