@@ -129,6 +129,9 @@ func (s *PostgresStorage) Create(ctx context.Context, url ShortenerURL) (string,
 				"SELECT short_url FROM urls WHERE original_url = $1",
 				url.OriginalURL,
 			).Scan(&shortKey)
+			if err != nil {
+				return "", err
+			}
 			return shortKey, ErrConflict
 		}
 		return "", err
