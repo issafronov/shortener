@@ -121,7 +121,10 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
+	storage.Urls[shortKey] = originalURL
+	uuid := len(storage.Urls) + 1
 	shortenerURL := &storage.ShortenerURL{
+		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
 	}
