@@ -152,19 +152,3 @@ func (s *PostgresStorage) Get(ctx context.Context, url string) (string, error) {
 	}
 	return originalURL, nil
 }
-
-func (s *PostgresStorage) GetByOriginalUrl(ctx context.Context, url string) (string, error) {
-	var originalURL string
-	err := s.db.QueryRowContext(
-		ctx,
-		"SELECT original_url FROM urls WHERE short_url = $1",
-		url,
-	).Scan(&originalURL)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", errors.New("url not found")
-		}
-		return "", err
-	}
-	return originalURL, nil
-}
