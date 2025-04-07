@@ -121,11 +121,7 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	storage.Urls[shortKey] = originalURL
-	uuid := len(storage.Urls) + 1
-
 	shortenerURL := &storage.ShortenerURL{
-		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
 	}
@@ -152,6 +148,59 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	enc := json.NewEncoder(res)
 
 	if err := enc.Encode(shortURLData); err != nil {
+		logger.Log.Debug("error encoding response", zap.Error(err))
+		return
+	}
+}
+
+func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.Request) {
+	logger.Log.Debug("CreateBatchJSONLinkHandle: decoding request")
+	var batchURLData []models.BatchURLData
+	dec := json.NewDecoder(req.Body)
+
+	if err := dec.Decode(&batchURLData); err != nil {
+		logger.Log.Debug("cannot decode request JSON body", zap.Error(err))
+		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+
+	var BatchURLDataResponse []models.BatchURLDataResponse
+
+	for _, batch := range batchURLData {
+		if batch.OriginalURL == "" || batch.CorrelationID == "" {
+			logger.Log.Info("Empty originalURL or correlationID, skipping")
+			continue
+		}
+		shortKey := utils.CreateShortKey(shortKeyLength)
+		shortenerURL := &storage.ShortenerURL{
+			ShortURL:      shortKey,
+			OriginalURL:   batch.OriginalURL,
+			CorrelationID: batch.CorrelationID,
+		}
+
+		if err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+			logger.Log.Info("Failed to write shortener URL", zap.Error(err))
+			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			continue
+		}
+
+		resultHostAddr := "http://" + req.Host
+
+		if h.config.BaseURL != "" {
+			resultHostAddr = h.config.BaseURL
+		}
+
+		BatchURLDataResponse = append(BatchURLDataResponse, models.BatchURLDataResponse{
+			ShortURL:      resultHostAddr + "/" + shortKey,
+			CorrelationID: batch.CorrelationID,
+		})
+	}
+
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(http.StatusCreated)
+	enc := json.NewEncoder(res)
+
+	if err := enc.Encode(BatchURLDataResponse); err != nil {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}

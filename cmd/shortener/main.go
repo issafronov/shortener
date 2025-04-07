@@ -50,6 +50,7 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
+	router.Post("/api/shorten/batch", handler.CreateBatchJSONLinkHandle)
 	router.Get("/ping", handler.Ping)
 	return router
 }
