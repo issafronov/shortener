@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/models"
@@ -30,7 +31,7 @@ func NewHandler(config *config.Config, s storage.Storage) (*Handler, error) {
 	}, nil
 }
 
-func (h *Handler) WriteURL(ctx context.Context, url storage.ShortenerURL) error {
+func (h *Handler) WriteURL(ctx context.Context, url storage.ShortenerURL) (string, error) {
 	logger.Log.Info("Writing URL", zap.String("url", url.ShortURL))
 	return h.storage.Create(ctx, url)
 }
@@ -63,7 +64,16 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 		OriginalURL: originalURL,
 	}
 
-	if err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+		if errors.Is(err, storage.ErrConflict) {
+			http.Error(res, http.StatusText(http.StatusConflict), http.StatusConflict)
+			resultHostAddr := "http://" + req.Host
+			if h.config.BaseURL != "" {
+				resultHostAddr = h.config.BaseURL
+			}
+			_, _ = res.Write([]byte(resultHostAddr + "/" + key))
+			return
+		}
 		logger.Log.Info("Failed to write shortener URL", zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -129,7 +139,25 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 		OriginalURL: originalURL,
 	}
 
-	if err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+		if errors.Is(err, storage.ErrConflict) {
+			res.Header().Set("Content-Type", "application/json")
+			res.WriteHeader(http.StatusConflict)
+			resultHostAddr := "http://" + req.Host
+			if h.config.BaseURL != "" {
+				resultHostAddr = h.config.BaseURL
+			}
+			shortURLData := models.ShortURLData{
+				Result: resultHostAddr + "/" + key,
+			}
+			enc := json.NewEncoder(res)
+
+			if err := enc.Encode(shortURLData); err != nil {
+				logger.Log.Debug("error encoding response", zap.Error(err))
+				return
+			}
+			return
+		}
 		logger.Log.Info("Failed to write shortener URL", zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -181,9 +209,18 @@ func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.R
 			CorrelationID: batch.CorrelationID,
 		}
 
-		if err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+		if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
 			logger.Log.Info("Failed to write shortener URL", zap.Error(err))
-			http.Error(res, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			resultHostAddr := "http://" + req.Host
+
+			if h.config.BaseURL != "" {
+				resultHostAddr = h.config.BaseURL
+			}
+
+			BatchURLDataResponse = append(BatchURLDataResponse, models.BatchURLDataResponse{
+				ShortURL:      resultHostAddr + "/" + key,
+				CorrelationID: batch.CorrelationID,
+			})
 			continue
 		}
 
