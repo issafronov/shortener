@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"github.com/go-resty/resty/v2"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
@@ -15,8 +16,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/go-resty/resty/v2"
 )
 
 func init() {
@@ -26,7 +25,8 @@ func init() {
 func TestCreateLinkHandle(t *testing.T) {
 	conf := &config.Config{}
 	conf.FileStoragePath = "testStorage.json"
-	h, err := handlers.NewHandler(conf)
+	s, _ := storage.NewFileStorage(conf)
+	h, err := handlers.NewHandler(conf, s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,8 @@ func TestCreateLinkHandle(t *testing.T) {
 func TestCreateJSONLinkHandle(t *testing.T) {
 	conf := &config.Config{}
 	conf.FileStoragePath = "testStorage.json"
-	h, err := handlers.NewHandler(conf)
+	s, _ := storage.NewFileStorage(conf)
+	h, err := handlers.NewHandler(conf, s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,8 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 func TestGzipCompression(t *testing.T) {
 	conf := &config.Config{}
 	conf.FileStoragePath = "testStorage.json"
-	h, err := handlers.NewHandler(conf)
+	s, _ := storage.NewFileStorage(conf)
+	h, err := handlers.NewHandler(conf, s)
 	if err != nil {
 		t.Fatal(err)
 	}

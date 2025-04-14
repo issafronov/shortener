@@ -10,6 +10,7 @@ type Config struct {
 	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
 	LoggerLevel     string `env:"LOG_LEVEL" envDefault:"info"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"internal/app/storage/storage.json"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 }
 
 func LoadConfig() *Config {
@@ -30,5 +31,6 @@ func ParseFlags(config *Config) {
 	flag.StringVar(&config.BaseURL, "b", config.BaseURL, "address and port to link")
 	flag.StringVar(&config.LoggerLevel, "l", config.LoggerLevel, "log level")
 	flag.StringVar(&config.FileStoragePath, "f", config.FileStoragePath, "file storage path")
+	flag.StringVar(&config.DatabaseDSN, "d", config.DatabaseDSN, "database DSN")
 	flag.Parse()
 }

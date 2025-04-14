@@ -2,37 +2,43 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
+	_ "github.com/jackc/pgx/stdlib"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	conf := config.LoadConfig()
 
 	if err := restoreStorage(conf); err != nil {
 		panic(err)
 	}
-	if err := runServer(conf); err != nil {
+	if err := runServer(conf, ctx); err != nil {
 		panic(err)
 	}
 }
 
-func Router(config *config.Config) chi.Router {
+func Router(config *config.Config, s storage.Storage) chi.Router {
 	router := chi.NewRouter()
 
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
 		panic(err)
 	}
 
-	handler, err := handlers.NewHandler(config)
+	handler, err := handlers.NewHandler(config, s)
 
 	if err != nil {
 		logger.Log.Info("Failed to initialize handler")
@@ -40,15 +46,34 @@ func Router(config *config.Config) chi.Router {
 
 	router.Use(logger.RequestLogger)
 	router.Use(compress.GzipMiddleware)
+	router.Use(middleware.Timeout(60 * time.Second))
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
+	router.Post("/api/shorten/batch", handler.CreateBatchJSONLinkHandle)
+	router.Get("/ping", handler.Ping)
 	return router
 }
 
-func runServer(config *config.Config) error {
-	fmt.Println("Running server on", config.ServerAddress)
-	return http.ListenAndServe(config.ServerAddress, Router(config))
+func runServer(cfg *config.Config, ctx context.Context) error {
+	fmt.Println("Running server on", cfg.ServerAddress)
+	var s storage.Storage
+	if cfg.DatabaseDSN != "" {
+		pgStorage, err := storage.NewPostgresStorage(ctx, cfg.DatabaseDSN)
+		if err != nil {
+			fmt.Println("Failed to connect to database")
+			fileStorage, err := storage.NewFileStorage(cfg)
+			if err != nil {
+				return err
+			}
+			s = fileStorage
+		} else {
+			s = pgStorage
+		}
+	} else {
+		s, _ = storage.NewFileStorage(cfg)
+	}
+	return http.ListenAndServe(cfg.ServerAddress, Router(cfg, s))
 }
 
 func restoreStorage(config *config.Config) error {
