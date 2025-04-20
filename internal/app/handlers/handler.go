@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
+	"github.com/issafronov/shortener/internal/app/contextkeys"
 	"github.com/issafronov/shortener/internal/app/models"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
@@ -37,6 +38,13 @@ func (h *Handler) WriteURL(ctx context.Context, url storage.ShortenerURL) (strin
 }
 
 func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
+	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
+
+	if !ok {
+		logger.Log.Info("Failed to get user ID")
+		res.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	body, err := io.ReadAll(req.Body)
 
 	if err != nil {
@@ -55,6 +63,7 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
 	storage.Urls[shortKey] = originalURL
+	storage.UsersUrls[userID] = []string{shortKey, originalURL}
 
 	uuid := len(storage.Urls) + 1
 
@@ -62,6 +71,7 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
+		UserID:      userID,
 	}
 
 	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
@@ -112,6 +122,13 @@ func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
 }
 
 func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Request) {
+	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
+
+	if !ok {
+		logger.Log.Info("Failed to get user ID")
+		res.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	logger.Log.Debug("decoding request")
 	var urlData models.URLData
 	dec := json.NewDecoder(req.Body)
@@ -133,11 +150,13 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
 	storage.Urls[shortKey] = originalURL
+	storage.UsersUrls[userID] = []string{shortKey, originalURL}
 	uuid := len(storage.Urls) + 1
 	shortenerURL := &storage.ShortenerURL{
 		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
+		UserID:      userID,
 	}
 
 	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
@@ -186,6 +205,13 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 }
 
 func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.Request) {
+	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
+
+	if !ok {
+		logger.Log.Info("Failed to get user ID")
+		res.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 	logger.Log.Debug("CreateBatchJSONLinkHandle: decoding request")
 	var batchURLData []models.BatchURLData
 	dec := json.NewDecoder(req.Body)
@@ -208,6 +234,7 @@ func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.R
 			ShortURL:      shortKey,
 			OriginalURL:   batch.OriginalURL,
 			CorrelationID: batch.CorrelationID,
+			UserID:        userID,
 		}
 
 		if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
@@ -242,6 +269,40 @@ func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.R
 	enc := json.NewEncoder(res)
 
 	if err := enc.Encode(BatchURLDataResponse); err != nil {
+		logger.Log.Debug("error encoding response", zap.Error(err))
+		return
+	}
+}
+
+func (h *Handler) GetUserLinksHandle(res http.ResponseWriter, req *http.Request) {
+	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
+
+	if !ok {
+		logger.Log.Info("Failed to get user ID")
+		res.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	resultHostAddr := "http://" + req.Host
+
+	if h.config.BaseURL != "" {
+		resultHostAddr = h.config.BaseURL
+	}
+	ctx := context.WithValue(req.Context(), contextkeys.HostKey, resultHostAddr)
+	ShortURLResponse, err := h.storage.GetByUser(ctx, userID)
+	if err != nil {
+		logger.Log.Info("Failed to get shortener URL")
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if len(ShortURLResponse) == 0 {
+		res.Header().Set("Content-Type", "application/json")
+		res.WriteHeader(http.StatusNoContent)
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	res.WriteHeader(http.StatusOK)
+	enc := json.NewEncoder(res)
+	if err := enc.Encode(ShortURLResponse); err != nil {
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}

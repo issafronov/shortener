@@ -6,7 +6,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/issafronov/shortener/internal/app/config"
+	"github.com/issafronov/shortener/internal/app/contextkeys"
+	"github.com/issafronov/shortener/internal/app/models"
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx"
@@ -15,6 +18,7 @@ import (
 )
 
 var Urls = make(map[string]string)
+var UsersUrls = make(map[string][]string)
 var ErrConflict = errors.New("conflict")
 
 type ShortenerURL struct {
@@ -22,11 +26,13 @@ type ShortenerURL struct {
 	CorrelationID string `json:"correlation_id"`
 	ShortURL      string `json:"short_url"`
 	OriginalURL   string `json:"original_url"`
+	UserID        string `json:"user_id"`
 }
 
 type Storage interface {
 	Create(ctx context.Context, url ShortenerURL) (string, error)
 	Get(ctx context.Context, url string) (string, error)
+	GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error)
 	Ping(ctx context.Context) error
 }
 
@@ -65,6 +71,19 @@ func (f *FileStorage) Get(ctx context.Context, url string) (string, error) {
 	return link, nil
 }
 
+func (f *FileStorage) GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error) {
+	var result []models.ShortURLResponse
+	for key, value := range UsersUrls {
+		if key == username {
+			result = append(result, models.ShortURLResponse{
+				ShortURL:    ctx.Value(contextkeys.HostKey).(string) + "/" + value[0],
+				OriginalURL: value[1],
+			})
+		}
+	}
+	return result, nil
+}
+
 func NewFileStorage(config *config.Config) (*FileStorage, error) {
 	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -95,7 +114,8 @@ func NewPostgresStorage(ctx context.Context, dsn string) (*PostgresStorage, erro
 	CREATE TABLE IF NOT EXISTS urls (
 	   id SERIAL PRIMARY KEY,
 	   short_url TEXT NOT NULL UNIQUE,
-	   original_url TEXT NOT NULL UNIQUE
+	   original_url TEXT NOT NULL UNIQUE,
+	   user_id TEXT NOT NULL
 	);
 	`
 
@@ -114,11 +134,12 @@ func (s *PostgresStorage) Create(ctx context.Context, url ShortenerURL) (string,
 	query := `
 	INSERT INTO urls (
 	    short_url,
-	    original_url
+	    original_url,
+		user_id
 	    )
-	VALUES ($1, $2)
+	VALUES ($1, $2, $3)
 	`
-	_, err := s.db.ExecContext(ctx, query, url.ShortURL, url.OriginalURL)
+	_, err := s.db.ExecContext(ctx, query, url.ShortURL, url.OriginalURL, url.UserID)
 
 	if err != nil {
 		var pgErr pgx.PgError
@@ -154,4 +175,27 @@ func (s *PostgresStorage) Get(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 	return originalURL, nil
+}
+
+func (s *PostgresStorage) GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error) {
+	var result []models.ShortURLResponse
+	rows, err := s.db.Query("SELECT short_url, original_url FROM urls WHERE user_id = $1", username)
+	if err != nil {
+		logger.Log.Info("Failed to get shortener URLs", zap.String("username", username), zap.Error(err))
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var shortURL string
+		var originalURL string
+		if err := rows.Scan(&shortURL, &originalURL); err != nil {
+			return nil, err
+		}
+		fmt.Println(ctx.Value(contextkeys.HostKey).(string), shortURL)
+		result = append(result, models.ShortURLResponse{ShortURL: ctx.Value(contextkeys.HostKey).(string) + "/" + shortURL, OriginalURL: originalURL})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }

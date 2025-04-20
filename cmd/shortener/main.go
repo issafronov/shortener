@@ -10,6 +10,7 @@ import (
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
+	"github.com/issafronov/shortener/internal/middleware/auth"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	_ "github.com/jackc/pgx/stdlib"
@@ -47,11 +48,13 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	router.Use(logger.RequestLogger)
 	router.Use(compress.GzipMiddleware)
 	router.Use(middleware.Timeout(60 * time.Second))
+	router.Use(auth.AuthorizationMiddleware)
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
 	router.Post("/api/shorten/batch", handler.CreateBatchJSONLinkHandle)
 	router.Get("/ping", handler.Ping)
+	router.Get("/api/user/urls", handler.GetUserLinksHandle)
 	return router
 }
 
