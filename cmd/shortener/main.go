@@ -62,20 +62,18 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 func runServer(cfg *config.Config, ctx context.Context) error {
 	fmt.Println("Running server on", cfg.ServerAddress)
 	var s storage.Storage
+	var err error
 	if cfg.DatabaseDSN != "" {
 		pgStorage, err := storage.NewPostgresStorage(ctx, cfg.DatabaseDSN)
 		if err != nil {
-			fmt.Println("Failed to connect to database")
-			fileStorage, err := storage.NewFileStorage(cfg)
-			if err != nil {
-				return err
-			}
-			s = fileStorage
-		} else {
-			s = pgStorage
+			return fmt.Errorf("failed to connect to database: %w", err)
 		}
+		s = pgStorage
 	} else {
-		s, _ = storage.NewFileStorage(cfg)
+		s, err = storage.NewFileStorage(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to initialize file storage: %w", err)
+		}
 	}
 	return http.ListenAndServe(cfg.ServerAddress, Router(cfg, s))
 }
