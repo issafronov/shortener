@@ -112,8 +112,14 @@ func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
 	link, err := h.storage.Get(req.Context(), key)
 
 	if err != nil {
+		if err.Error() == "url gone" {
+			logger.Log.Info("Link is deleted", zap.String("key", key))
+			http.Error(res, http.StatusText(http.StatusGone), http.StatusGone)
+			return
+		}
 		logger.Log.Info("Error getting link", zap.String("key", key), zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+		return
 	}
 
 	logger.Log.Info("Link found", zap.String("key", key))
