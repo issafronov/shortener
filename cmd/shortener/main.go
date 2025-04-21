@@ -55,6 +55,7 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	router.Post("/api/shorten/batch", handler.CreateBatchJSONLinkHandle)
 	router.Get("/ping", handler.Ping)
 	router.Get("/api/user/urls", handler.GetUserLinksHandle)
+	router.Delete("/api/user/urls", handler.DeleteLinksHandle)
 	return router
 }
 
@@ -95,7 +96,7 @@ func restoreStorage(config *config.Config) error {
 		if err != nil {
 			return err
 		}
-		storage.Urls[shortenerURL.ShortURL] = shortenerURL.OriginalURL
+		storage.Urls[shortenerURL.ShortURL] = shortenerURL
 	}
 	return file.Close()
 }

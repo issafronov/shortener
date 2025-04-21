@@ -22,7 +22,7 @@ import (
 )
 
 func init() {
-	storage.Urls = map[string]string{}
+	storage.Urls = map[string]storage.ShortenerURL{}
 }
 
 func TestCreateLinkHandle(t *testing.T) {

@@ -39,14 +39,13 @@ func (h *Handler) WriteURL(ctx context.Context, url storage.ShortenerURL) (strin
 
 func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
-
 	if !ok {
 		logger.Log.Info("Failed to get user ID")
 		res.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	body, err := io.ReadAll(req.Body)
 
+	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		logger.Log.Info("Error reading body", zap.Error(err))
 		http.Error(res, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -62,19 +61,19 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	storage.Urls[shortKey] = originalURL
-	storage.UsersUrls[userID] = []string{shortKey, originalURL}
-
 	uuid := len(storage.Urls) + 1
 
-	shortenerURL := &storage.ShortenerURL{
+	shortenerURL := storage.ShortenerURL{
 		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
 		UserID:      userID,
 	}
 
-	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+	storage.Urls[shortKey] = shortenerURL
+	storage.UsersUrls[userID] = []string{shortKey, originalURL}
+
+	if key, err := h.WriteURL(req.Context(), shortenerURL); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			res.Header().Set("Content-Type", "text/plain")
 			res.WriteHeader(http.StatusConflict)
@@ -149,17 +148,17 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	}
 
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	storage.Urls[shortKey] = originalURL
-	storage.UsersUrls[userID] = []string{shortKey, originalURL}
 	uuid := len(storage.Urls) + 1
-	shortenerURL := &storage.ShortenerURL{
+	shortenerURL := storage.ShortenerURL{
 		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
 		UserID:      userID,
 	}
+	storage.Urls[shortKey] = shortenerURL
+	storage.UsersUrls[userID] = []string{shortKey, originalURL}
 
-	if key, err := h.WriteURL(req.Context(), *shortenerURL); err != nil {
+	if key, err := h.WriteURL(req.Context(), shortenerURL); err != nil {
 		if errors.Is(err, storage.ErrConflict) {
 			res.Header().Set("Content-Type", "application/json")
 			res.WriteHeader(http.StatusConflict)
@@ -306,4 +305,51 @@ func (h *Handler) GetUserLinksHandle(res http.ResponseWriter, req *http.Request)
 		logger.Log.Debug("error encoding response", zap.Error(err))
 		return
 	}
+}
+
+func (h *Handler) DeleteLinksHandle(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(contextkeys.UserIDKey).(string)
+
+	var ids []string
+	if err := json.NewDecoder(r.Body).Decode(&ids); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Используем паттерн fan-in
+	chunkSize := 10 // Размер каждой "порции" URL, которую будем обрабатывать параллельно
+	totalChunks := len(ids) / chunkSize
+	if len(ids)%chunkSize != 0 {
+		totalChunks++
+	}
+
+	resultChan := make(chan error, totalChunks)
+
+	// Разбиваем список на чанки и запускаем горутины
+	for i := 0; i < totalChunks; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+
+		go func(chunk []string) {
+			err := h.storage.DeleteURLs(r.Context(), userID, chunk)
+			resultChan <- err
+		}(ids[start:end])
+	}
+
+	// Собираем ошибки из горутин
+	var firstError error
+	for i := 0; i < totalChunks; i++ {
+		if err := <-resultChan; err != nil && firstError == nil {
+			firstError = err
+		}
+	}
+
+	if firstError != nil {
+		logger.Log.Error("Failed to delete some URLs", zap.Error(firstError))
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }
