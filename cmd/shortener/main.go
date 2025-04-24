@@ -10,6 +10,7 @@ import (
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
+	"github.com/issafronov/shortener/internal/middleware/auth"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	_ "github.com/jackc/pgx/stdlib"
@@ -47,31 +48,32 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	router.Use(logger.RequestLogger)
 	router.Use(compress.GzipMiddleware)
 	router.Use(middleware.Timeout(60 * time.Second))
+	router.Use(auth.AuthorizationMiddleware)
 	router.Get("/{key}", handler.GetLinkHandle)
 	router.Post("/", handler.CreateLinkHandle)
 	router.Post("/api/shorten", handler.CreateJSONLinkHandle)
 	router.Post("/api/shorten/batch", handler.CreateBatchJSONLinkHandle)
 	router.Get("/ping", handler.Ping)
+	router.Get("/api/user/urls", handler.GetUserLinksHandle)
+	router.Delete("/api/user/urls", handler.DeleteLinksHandle)
 	return router
 }
 
 func runServer(cfg *config.Config, ctx context.Context) error {
 	fmt.Println("Running server on", cfg.ServerAddress)
 	var s storage.Storage
+	var err error
 	if cfg.DatabaseDSN != "" {
 		pgStorage, err := storage.NewPostgresStorage(ctx, cfg.DatabaseDSN)
 		if err != nil {
-			fmt.Println("Failed to connect to database")
-			fileStorage, err := storage.NewFileStorage(cfg)
-			if err != nil {
-				return err
-			}
-			s = fileStorage
-		} else {
-			s = pgStorage
+			return fmt.Errorf("failed to connect to database: %w", err)
 		}
+		s = pgStorage
 	} else {
-		s, _ = storage.NewFileStorage(cfg)
+		s, err = storage.NewFileStorage(cfg)
+		if err != nil {
+			return fmt.Errorf("failed to initialize file storage: %w", err)
+		}
 	}
 	return http.ListenAndServe(cfg.ServerAddress, Router(cfg, s))
 }
@@ -92,7 +94,7 @@ func restoreStorage(config *config.Config) error {
 		if err != nil {
 			return err
 		}
-		storage.Urls[shortenerURL.ShortURL] = shortenerURL.OriginalURL
+		storage.Urls[shortenerURL.ShortURL] = shortenerURL
 	}
 	return file.Close()
 }
