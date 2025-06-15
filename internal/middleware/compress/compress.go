@@ -17,8 +17,9 @@ var gzipWriterPool = sync.Pool{
 }
 
 type compressWriter struct {
-	w  http.ResponseWriter
-	zw *gzip.Writer
+	w           http.ResponseWriter
+	zw          *gzip.Writer
+	wroteHeader bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
@@ -35,14 +36,21 @@ func (c *compressWriter) Header() http.Header {
 }
 
 func (c *compressWriter) Write(p []byte) (int, error) {
+	if !c.wroteHeader {
+		c.WriteHeader(http.StatusOK)
+	}
 	return c.zw.Write(p)
 }
 
 func (c *compressWriter) WriteHeader(statusCode int) {
-	if statusCode < 300 {
-		c.w.Header().Set("Content-Encoding", "gzip")
+	if !c.wroteHeader {
+		if statusCode >= 200 && statusCode < 300 {
+			c.w.Header().Set("Content-Encoding", "gzip")
+			c.w.Header().Del("Content-Length")
+		}
+		c.w.WriteHeader(statusCode)
+		c.wroteHeader = true
 	}
-	c.w.WriteHeader(statusCode)
 }
 
 func (c *compressWriter) Close() error {
@@ -78,12 +86,11 @@ func (c *compressReader) Close() error {
 
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ow := w
-
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			cw := newCompressWriter(w)
-			ow = cw
 			defer cw.Close()
+			next.ServeHTTP(cw, r)
+			return
 		}
 
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
@@ -93,10 +100,10 @@ func GzipMiddleware(next http.Handler) http.Handler {
 				fmt.Println("Error creating gzip reader:", err)
 				return
 			}
-			r.Body = cr
 			defer cr.Close()
+			r.Body = cr
 		}
 
-		next.ServeHTTP(ow, r)
+		next.ServeHTTP(w, r)
 	})
 }
