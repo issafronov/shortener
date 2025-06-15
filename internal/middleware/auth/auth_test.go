@@ -29,8 +29,10 @@ func TestAuthorizationMiddleware_NoCookie(t *testing.T) {
 	}))
 
 	handler.ServeHTTP(rr, req)
+	res := rr.Result()
+	defer res.Body.Close()
 
-	cookies := rr.Result().Cookies()
+	cookies := res.Cookies()
 	var jwtToken string
 	for _, c := range cookies {
 		if c.Name == "JWT_TOKEN" {

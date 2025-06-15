@@ -68,6 +68,7 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 	h.CreateJSONLinkHandle(w, req)
 
 	res := w.Result()
+	defer res.Body.Close()
 	assert.Equal(t, http.StatusCreated, res.StatusCode)
 }
 
@@ -78,7 +79,9 @@ func TestCreateJSONLinkHandle_Unauthorized(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.CreateJSONLinkHandle(w, req)
-	assert.Equal(t, http.StatusUnauthorized, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
 }
 
 func TestCreateJSONLinkHandle_InvalidBody(t *testing.T) {
@@ -90,7 +93,9 @@ func TestCreateJSONLinkHandle_InvalidBody(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.CreateJSONLinkHandle(w, req)
-	assert.Equal(t, http.StatusBadRequest, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 }
 
 func TestGetLinkHandle_Found(t *testing.T) {
@@ -116,7 +121,9 @@ func TestGetLinkHandle_Found(t *testing.T) {
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
 
 	h.GetLinkHandle(w, req)
-	assert.Equal(t, http.StatusTemporaryRedirect, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusTemporaryRedirect, res.StatusCode)
 }
 
 func TestGetUserLinksHandle_NoContent(t *testing.T) {
@@ -133,7 +140,9 @@ func TestGetUserLinksHandle_NoContent(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.GetUserLinksHandle(w, req)
-	assert.Equal(t, http.StatusNoContent, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusNoContent, res.StatusCode)
 }
 
 func TestDeleteLinksHandle(t *testing.T) {
@@ -151,7 +160,9 @@ func TestDeleteLinksHandle(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.DeleteLinksHandle(w, req)
-	assert.Equal(t, http.StatusAccepted, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusAccepted, res.StatusCode)
 }
 
 func TestCreateLinkHandle(t *testing.T) {
@@ -169,7 +180,9 @@ func TestCreateLinkHandle(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.CreateLinkHandle(w, req)
-	assert.Equal(t, http.StatusCreated, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusCreated, res.StatusCode)
 }
 
 func TestCreateBatchJSONLinkHandle(t *testing.T) {
@@ -192,7 +205,9 @@ func TestCreateBatchJSONLinkHandle(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.CreateBatchJSONLinkHandle(w, req)
-	assert.Equal(t, http.StatusCreated, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusCreated, res.StatusCode)
 }
 
 func TestGetLinkHandle_NotFound(t *testing.T) {
@@ -211,7 +226,9 @@ func TestGetLinkHandle_NotFound(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.GetLinkHandle(w, req)
-	assert.Equal(t, http.StatusNotFound, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusNotFound, res.StatusCode)
 }
 
 func TestGetLinkHandle_Deleted(t *testing.T) {
@@ -230,7 +247,9 @@ func TestGetLinkHandle_Deleted(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.GetLinkHandle(w, req)
-	assert.Equal(t, http.StatusGone, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusGone, res.StatusCode)
 }
 
 func TestGetUserLinksHandle_OK(t *testing.T) {
@@ -252,5 +271,7 @@ func TestGetUserLinksHandle_OK(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	h.GetUserLinksHandle(w, req)
-	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
+	res := w.Result()
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 }

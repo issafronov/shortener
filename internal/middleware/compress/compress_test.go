@@ -112,6 +112,7 @@ func TestGzipMiddleware_BadGzipInput(t *testing.T) {
 	GzipMiddleware(handler).ServeHTTP(rr, req)
 
 	res := rr.Result()
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusInternalServerError {
 		t.Errorf("expected status 500, got %d", res.StatusCode)
 	}

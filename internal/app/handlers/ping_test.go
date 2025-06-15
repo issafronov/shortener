@@ -49,6 +49,7 @@ func TestPing_Success(t *testing.T) {
 	h.Ping(w, req)
 
 	res := w.Result()
+	defer res.Body.Close()
 	assert.Equal(t, http.StatusOK, res.StatusCode)
 }
 
@@ -68,5 +69,6 @@ func TestPing_Failure(t *testing.T) {
 	h.Ping(w, req)
 
 	res := w.Result()
+	defer res.Body.Close()
 	assert.Equal(t, http.StatusServiceUnavailable, res.StatusCode)
 }
