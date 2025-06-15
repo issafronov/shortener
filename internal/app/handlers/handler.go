@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/contextkeys"
@@ -12,8 +15,6 @@ import (
 	"github.com/issafronov/shortener/internal/app/utils"
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
 )
 
 const (

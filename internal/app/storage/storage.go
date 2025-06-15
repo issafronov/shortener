@@ -7,14 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/contextkeys"
 	"github.com/issafronov/shortener/internal/app/models"
 	"github.com/issafronov/shortener/internal/middleware/logger"
+	"github.com/issafronov/shortener/internal/scripts"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx"
 	"go.uber.org/zap"
-	"os"
 )
 
 var Urls = make(map[string]ShortenerURL)
@@ -122,21 +124,11 @@ func NewPostgresStorage(ctx context.Context, dsn string) (*PostgresStorage, erro
 		return nil, err
 	}
 
-	if err := db.Ping(); err != nil {
+	if err := scripts.RunMigrations(dsn); err != nil {
 		return nil, err
 	}
 
-	createTableQuery := `
-	CREATE TABLE IF NOT EXISTS urls (
-	   id SERIAL PRIMARY KEY,
-	   short_url TEXT NOT NULL UNIQUE,
-	   original_url TEXT NOT NULL UNIQUE,
-	   user_id TEXT NOT NULL,
-	   is_deleted BOOLEAN DEFAULT FALSE
-	);
-	`
-
-	if _, err = db.ExecContext(ctx, createTableQuery); err != nil {
+	if err := db.Ping(); err != nil {
 		return nil, err
 	}
 

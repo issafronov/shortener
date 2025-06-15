@@ -6,7 +6,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
+
+var gzipWriterPool = sync.Pool{
+	New: func() interface{} {
+		w, _ := gzip.NewWriterLevel(io.Discard, gzip.DefaultCompression)
+		return w
+	},
+}
 
 type compressWriter struct {
 	w  http.ResponseWriter
@@ -14,9 +22,11 @@ type compressWriter struct {
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
+	zw := gzipWriterPool.Get().(*gzip.Writer)
+	zw.Reset(w)
 	return &compressWriter{
 		w:  w,
-		zw: gzip.NewWriter(w),
+		zw: zw,
 	}
 }
 
@@ -36,7 +46,10 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 }
 
 func (c *compressWriter) Close() error {
-	return c.zw.Close()
+	err := c.zw.Close()
+	c.zw.Reset(io.Discard) // очистка, чтобы избежать утечек
+	gzipWriterPool.Put(c.zw)
+	return err
 }
 
 type compressReader struct {
@@ -49,14 +62,10 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	return &compressReader{
-		r:  r,
-		zr: zr,
-	}, nil
+	return &compressReader{r: r, zr: zr}, nil
 }
 
-func (c compressReader) Read(p []byte) (n int, err error) {
+func (c *compressReader) Read(p []byte) (int, error) {
 	return c.zr.Read(p)
 }
 
@@ -68,24 +77,20 @@ func (c *compressReader) Close() error {
 }
 
 func GzipMiddleware(next http.Handler) http.Handler {
-	fn := func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ow := w
-		acceptEncoding := r.Header.Get("Accept-Encoding")
-		supportsGzip := strings.Contains(acceptEncoding, "gzip")
-		if supportsGzip {
+
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			cw := newCompressWriter(w)
 			ow = cw
 			defer cw.Close()
 		}
 
-		contentEncoding := r.Header.Get("Content-Encoding")
-		sendsGzip := strings.Contains(contentEncoding, "gzip")
-		if sendsGzip {
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
 			cr, err := newCompressReader(r.Body)
-			fmt.Println("GzipMiddleware")
 			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Println("Error creating compress reader", err)
+				http.Error(w, "Failed to read gzip body", http.StatusInternalServerError)
+				fmt.Println("Error creating gzip reader:", err)
 				return
 			}
 			r.Body = cr
@@ -93,6 +98,5 @@ func GzipMiddleware(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(ow, r)
-	}
-	return http.HandlerFunc(fn)
+	})
 }
