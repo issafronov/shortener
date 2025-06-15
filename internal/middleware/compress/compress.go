@@ -20,14 +20,16 @@ type compressWriter struct {
 	w           http.ResponseWriter
 	zw          *gzip.Writer
 	wroteHeader bool
+	compress    bool
 }
 
 func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	zw := gzipWriterPool.Get().(*gzip.Writer)
 	zw.Reset(w)
 	return &compressWriter{
-		w:  w,
-		zw: zw,
+		w:        w,
+		zw:       zw,
+		compress: false,
 	}
 }
 
@@ -39,21 +41,34 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 	if !c.wroteHeader {
 		c.WriteHeader(http.StatusOK)
 	}
-	return c.zw.Write(p)
+	if c.compress {
+		return c.zw.Write(p)
+	}
+	return c.w.Write(p)
 }
 
 func (c *compressWriter) WriteHeader(statusCode int) {
-	if !c.wroteHeader {
-		if statusCode >= 200 && statusCode < 300 {
-			c.w.Header().Set("Content-Encoding", "gzip")
-			c.w.Header().Del("Content-Length")
-		}
-		c.w.WriteHeader(statusCode)
-		c.wroteHeader = true
+	if c.wroteHeader {
+		return
 	}
+	// Сжимаем тело только для 2xx ответов
+	if statusCode >= 200 && statusCode < 300 {
+		c.w.Header().Set("Content-Encoding", "gzip")
+		c.w.Header().Del("Content-Length") // размер меняется при сжатии
+		c.compress = true
+	} else {
+		// Для редиректов (3xx) и ошибок не сжимаем
+		c.compress = false
+	}
+	c.w.WriteHeader(statusCode)
+	c.wroteHeader = true
 }
 
 func (c *compressWriter) Close() error {
+	if !c.compress {
+		// Если gzip не был включен, то просто ничего не делаем
+		return nil
+	}
 	err := c.zw.Close()
 	c.zw.Reset(io.Discard) // очистка, чтобы избежать утечек
 	gzipWriterPool.Put(c.zw)
@@ -86,11 +101,15 @@ func (c *compressReader) Close() error {
 
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ow := w
 		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
 			cw := newCompressWriter(w)
-			defer cw.Close()
-			next.ServeHTTP(cw, r)
-			return
+			ow = cw
+			defer func() {
+				if err := cw.Close(); err != nil {
+					fmt.Println("gzip close error:", err)
+				}
+			}()
 		}
 
 		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
@@ -100,10 +119,10 @@ func GzipMiddleware(next http.Handler) http.Handler {
 				fmt.Println("Error creating gzip reader:", err)
 				return
 			}
-			defer cr.Close()
 			r.Body = cr
+			defer cr.Close()
 		}
 
-		next.ServeHTTP(w, r)
+		next.ServeHTTP(ow, r)
 	})
 }
