@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// RunMigrations запускает миграции
 func RunMigrations(databaseURI string) error {
 	m, err := migrate.New(
 		"file://internal/scripts/migrations",

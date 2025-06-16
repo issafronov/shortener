@@ -19,10 +19,18 @@ import (
 	"go.uber.org/zap"
 )
 
-var Urls = make(map[string]ShortenerURL)
-var UsersUrls = make(map[string][]string)
-var ErrConflict = errors.New("conflict")
+var (
+	// Urls хранит все сокращённые URL-адреса в памяти при использовании файлового хранилища
+	Urls = make(map[string]ShortenerURL)
 
+	// UsersUrls сопоставляет пользователя с его URL-ами в памяти при использовании файлового хранилища
+	UsersUrls = make(map[string][]string)
+
+	// ErrConflict возвращается, если URL уже существует в базе
+	ErrConflict = errors.New("conflict")
+)
+
+// ShortenerURL - объект сокращённой ссылки
 type ShortenerURL struct {
 	UUID          int    `json:"uuid"`
 	CorrelationID string `json:"correlation_id"`
@@ -32,6 +40,7 @@ type ShortenerURL struct {
 	IsDeleted     bool   `json:"is_deleted"`
 }
 
+// Storage описывает интерфейс хранилища URL-ов
 type Storage interface {
 	Create(ctx context.Context, url ShortenerURL) (string, error)
 	Get(ctx context.Context, url string) (string, error)
@@ -40,16 +49,20 @@ type Storage interface {
 	DeleteURLs(ctx context.Context, userID string, urls []string) error
 }
 
+
+// FileStorage реализует интерфейс Storage с использованием файлового хранилища
 type FileStorage struct {
 	file   *os.File
 	writer *bufio.Writer
 	reader *bufio.Reader
 }
 
+// Ping проверяет доступность файлового хранилища
 func (f *FileStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
+// Create сохраняет URL в файл
 func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) (string, error) {
 	data, err := json.Marshal(url)
 	if err != nil {
@@ -67,6 +80,7 @@ func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) (string, err
 	return "", f.writer.Flush()
 }
 
+// Get возвращает оригинальный URL по сокращённому
 func (f *FileStorage) Get(ctx context.Context, url string) (string, error) {
 	link, ok := Urls[url]
 	if !ok {
@@ -75,6 +89,7 @@ func (f *FileStorage) Get(ctx context.Context, url string) (string, error) {
 	return link.OriginalURL, nil
 }
 
+// GetByUser возвращает все URL-ы, сохранённые пользователем
 func (f *FileStorage) GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error) {
 	var result []models.ShortURLResponse
 	for key, value := range UsersUrls {
@@ -88,6 +103,7 @@ func (f *FileStorage) GetByUser(ctx context.Context, username string) ([]models.
 	return result, nil
 }
 
+// DeleteURLs помечает переданные ссылки как удалённые
 func (f *FileStorage) DeleteURLs(ctx context.Context, userID string, ids []string) error {
 	for _, id := range ids {
 		shortenerURL, exists := Urls[id]
@@ -102,6 +118,7 @@ func (f *FileStorage) DeleteURLs(ctx context.Context, userID string, ids []strin
 	return nil
 }
 
+// NewFileStorage создаёт экземпляр FileStorage с указанием пути до файла
 func NewFileStorage(config *config.Config) (*FileStorage, error) {
 	file, err := os.OpenFile(config.FileStoragePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
@@ -114,10 +131,12 @@ func NewFileStorage(config *config.Config) (*FileStorage, error) {
 	}, nil
 }
 
+// PostgresStorage реализует интерфейс Storage с использованием базы PostgreSQL
 type PostgresStorage struct {
 	db *sql.DB
 }
 
+// NewPostgresStorage создаёт новое подключение к PostgreSQL и выполняет миграции
 func NewPostgresStorage(ctx context.Context, dsn string) (*PostgresStorage, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -135,10 +154,12 @@ func NewPostgresStorage(ctx context.Context, dsn string) (*PostgresStorage, erro
 	return &PostgresStorage{db: db}, nil
 }
 
+// Ping проверяет соединение с базой данных
 func (s *PostgresStorage) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
+// Create сохраняет новую запись в базу данных
 func (s *PostgresStorage) Create(ctx context.Context, url ShortenerURL) (string, error) {
 	query := `
 	INSERT INTO urls (
@@ -170,6 +191,7 @@ func (s *PostgresStorage) Create(ctx context.Context, url ShortenerURL) (string,
 	return "", nil
 }
 
+// Get возвращает оригинальный URL по сокращённому из базы данных
 func (s *PostgresStorage) Get(ctx context.Context, url string) (string, error) {
 	var originalURL string
 	var isDeleted bool
@@ -190,6 +212,7 @@ func (s *PostgresStorage) Get(ctx context.Context, url string) (string, error) {
 	return originalURL, nil
 }
 
+// GetByUser возвращает сокращенные ссылки для пользователя
 func (s *PostgresStorage) GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error) {
 	var result []models.ShortURLResponse
 	rows, err := s.db.Query("SELECT short_url, original_url FROM urls WHERE user_id = $1", username)
@@ -213,6 +236,7 @@ func (s *PostgresStorage) GetByUser(ctx context.Context, username string) ([]mod
 	return result, nil
 }
 
+// DeleteURLs удаляет сокращенные ссылки
 func (s *PostgresStorage) DeleteURLs(ctx context.Context, userID string, urls []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

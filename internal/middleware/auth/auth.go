@@ -14,6 +14,7 @@ import (
 	"github.com/issafronov/shortener/internal/middleware/logger"
 )
 
+// AuthorizationMiddleware — middleware для аутентификации пользователя с помощью JWT токена
 func AuthorizationMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		tokenString, err := r.Cookie("JWT_TOKEN")

@@ -1,27 +1,31 @@
 package logger
 
 import (
-	"go.uber.org/zap"
 	"net/http"
 	"time"
+
+	"go.uber.org/zap"
 )
 
+// Log — глобальный логгер, инициализируемый через функцию Initialize
 var Log *zap.Logger = zap.NewNop()
 
 type (
-	// берём структуру для хранения сведений об ответе
+	// responseData содержит данные об HTTP-ответе
 	responseData struct {
 		status int
 		size   int
 	}
 
-	// добавляем реализацию http.ResponseWriter
+	// loggingResponseWriter реализует http.ResponseWriter и собирает информацию
+	// об ответе: статус-код и размер тела
 	loggingResponseWriter struct {
-		http.ResponseWriter // встраиваем оригинальный http.ResponseWriter
-		responseData        *responseData
+		http.ResponseWriter
+		responseData *responseData
 	}
 )
 
+// Write записывает тело ответа и сохраняет количество записанных байт
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	// записываем ответ, используя оригинальный http.ResponseWriter
 	size, err := r.ResponseWriter.Write(b)
@@ -29,12 +33,14 @@ func (r *loggingResponseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
+// WriteHeader записывает HTTP-статус и сохраняет его в responseData
 func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	// записываем код статуса, используя оригинальный http.ResponseWriter
 	r.ResponseWriter.WriteHeader(statusCode)
 	r.responseData.status = statusCode // захватываем код статуса
 }
 
+// Initialize настраивает глобальный логгер Log в соответствии с уровнем логирования
 func Initialize(level string) error {
 	lvl, err := zap.ParseAtomicLevel(level)
 	if err != nil {
@@ -53,6 +59,7 @@ func Initialize(level string) error {
 	return nil
 }
 
+// RequestLogger — middleware, логирующий HTTP-запросы и ответы
 func RequestLogger(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()

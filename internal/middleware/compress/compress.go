@@ -16,6 +16,7 @@ var gzipWriterPool = sync.Pool{
 	},
 }
 
+
 type compressWriter struct {
 	w           http.ResponseWriter
 	zw          *gzip.Writer
@@ -33,10 +34,12 @@ func newCompressWriter(w http.ResponseWriter) *compressWriter {
 	}
 }
 
+// Header возвращает заголовки ответа
 func (c *compressWriter) Header() http.Header {
 	return c.w.Header()
 }
 
+// Write записывает тела ответа, при необходимости сжимает
 func (c *compressWriter) Write(p []byte) (int, error) {
 	if !c.wroteHeader {
 		c.WriteHeader(http.StatusOK)
@@ -47,6 +50,7 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 	return c.w.Write(p)
 }
 
+// WriteHeader добавляет заголовок
 func (c *compressWriter) WriteHeader(statusCode int) {
 	if c.wroteHeader {
 		return
@@ -64,6 +68,7 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 	c.wroteHeader = true
 }
 
+// Close закрывает и возвращает в пул
 func (c *compressWriter) Close() error {
 	if !c.compress {
 		// Если gzip не был включен, то просто ничего не делаем
@@ -88,10 +93,12 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	return &compressReader{r: r, zr: zr}, nil
 }
 
+// Read чтение данных
 func (c *compressReader) Read(p []byte) (int, error) {
 	return c.zr.Read(p)
 }
 
+// Close закрвает ресурсы
 func (c *compressReader) Close() error {
 	if err := c.r.Close(); err != nil {
 		return err
@@ -99,6 +106,7 @@ func (c *compressReader) Close() error {
 	return c.zr.Close()
 }
 
+// GzipMiddleware — middleware для обработки gzip-сжатия входящих и исходящих HTTP-сообщений
 func GzipMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ow := w
