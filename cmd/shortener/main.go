@@ -37,6 +37,7 @@ func main() {
 	}
 }
 
+// Router возвращает настроенный маршрутизатор chi с подключёнными middleware и обработчиками
 func Router(config *config.Config, s storage.Storage) chi.Router {
 	router := chi.NewRouter()
 
