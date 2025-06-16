@@ -19,18 +19,16 @@ import (
 	"go.uber.org/zap"
 )
 
-var (
-	// Urls хранит все сокращённые URL-адреса в памяти при использовании файлового хранилища.
-	Urls = make(map[string]ShortenerURL)
+// Urls хранит все сокращённые URL-адреса в памяти при использовании файлового хранилища.
+var Urls = make(map[string]ShortenerURL)
 
-	// UsersUrls сопоставляет пользователя с его URL-ами в памяти при использовании файлового хранилища.
-	UsersUrls = make(map[string][]string)
+// UsersUrls сопоставляет пользователя с его URL-ами в памяти при использовании файлового хранилища.
+var UsersUrls = make(map[string][]string)
 
-	// ErrConflict возвращается, если URL уже существует в базе.
-	ErrConflict = errors.New("conflict")
-)
+// ErrConflict возвращается, если URL уже существует в базе.
+var ErrConflict = errors.New("conflict")
 
-// ShortenerURL - объект сокращённой ссылки
+// ShortenerURL - объект сокращённой ссылки.
 type ShortenerURL struct {
 	UUID          int    `json:"uuid"`
 	CorrelationID string `json:"correlation_id"`
