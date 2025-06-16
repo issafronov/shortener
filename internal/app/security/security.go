@@ -1,9 +1,10 @@
 package security
 
 import (
-	"github.com/issafronov/shortener/internal/middleware/logger"
 	"os"
 	"time"
+
+	"github.com/issafronov/shortener/internal/middleware/logger"
 
 	"github.com/golang-jwt/jwt/v4"
 )
@@ -15,7 +16,6 @@ type Claims struct {
 }
 
 const exp = time.Hour * 24
-
 
 // GenerateJWT создает JWT-токен для указанного userID
 func GenerateJWT(userID string) (string, error) {

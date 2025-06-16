@@ -49,7 +49,6 @@ type Storage interface {
 	DeleteURLs(ctx context.Context, userID string, urls []string) error
 }
 
-
 // FileStorage реализует интерфейс Storage с использованием файлового хранилища
 type FileStorage struct {
 	file   *os.File

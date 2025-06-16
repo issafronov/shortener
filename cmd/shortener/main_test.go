@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
 	"github.com/go-resty/resty/v2"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/contextkeys"
@@ -14,11 +20,6 @@ import (
 	"github.com/issafronov/shortener/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 func init() {

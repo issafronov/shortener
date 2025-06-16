@@ -2,7 +2,6 @@ package contextkeys
 
 type contextKey string
 
-
 const (
 	// UserIDKey используется для хранения идентификатора пользователя в контексте запроса
 	UserIDKey contextKey = "UserID"

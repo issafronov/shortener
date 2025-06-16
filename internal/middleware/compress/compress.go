@@ -16,7 +16,6 @@ var gzipWriterPool = sync.Pool{
 	},
 }
 
-
 type compressWriter struct {
 	w           http.ResponseWriter
 	zw          *gzip.Writer

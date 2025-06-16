@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"fmt"
+	"net/http"
+
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"go.uber.org/zap"
-	"net/http"
 )
 
 // Ping - handler для проверки работоспособности сервиса
