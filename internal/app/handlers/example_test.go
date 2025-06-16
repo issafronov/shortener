@@ -34,6 +34,7 @@ func ExampleHandler_CreateJSONLinkHandle() {
 
 	h.CreateJSONLinkHandle(w, req)
 	resp := w.Result()
+	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
 	// Output:
@@ -70,6 +71,7 @@ func ExampleHandler_GetLinkHandle() {
 
 	h.GetLinkHandle(w, req)
 	resp := w.Result()
+	defer resp.Body.Close()
 
 	fmt.Println("Status:", resp.StatusCode)
 	fmt.Println("Location:", resp.Header.Get("Location"))
