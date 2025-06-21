@@ -2,16 +2,19 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"os"
+	"time"
+
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/issafronov/shortener/internal/app/contextkeys"
 	"github.com/issafronov/shortener/internal/app/security"
 	"github.com/issafronov/shortener/internal/app/utils"
 	"github.com/issafronov/shortener/internal/middleware/logger"
-	"net/http"
-	"os"
-	"time"
 )
 
+// AuthorizationMiddleware — middleware для аутентификации пользователя с помощью JWT токена
 func AuthorizationMiddleware(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		tokenString, err := r.Cookie("JWT_TOKEN")
@@ -41,6 +44,11 @@ func AuthorizationMiddleware(next http.Handler) http.Handler {
 				return []byte(secret), nil
 			})
 			if err != nil {
+				if errors.Is(err, jwt.ErrTokenExpired) {
+					logger.Log.Debug("AuthorizationMiddleware: token expired")
+					http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+					return
+				}
 				logger.Log.Debug("AuthorizationMiddleware: error parsing JWT token")
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				return

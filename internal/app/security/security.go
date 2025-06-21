@@ -1,13 +1,15 @@
 package security
 
 import (
-	"github.com/issafronov/shortener/internal/middleware/logger"
 	"os"
 	"time"
+
+	"github.com/issafronov/shortener/internal/middleware/logger"
 
 	"github.com/golang-jwt/jwt/v4"
 )
 
+// Claims представляет набор пользовательских данных, встраиваемых в JWT-токен
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID string
@@ -15,6 +17,7 @@ type Claims struct {
 
 const exp = time.Hour * 24
 
+// GenerateJWT создает JWT-токен для указанного userID
 func GenerateJWT(userID string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{

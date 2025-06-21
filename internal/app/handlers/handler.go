@@ -1,9 +1,13 @@
+// Package handlers содержит HTTP-хендлеры для обработки запросов к сервису сокращения URL
 package handlers
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/contextkeys"
@@ -12,19 +16,19 @@ import (
 	"github.com/issafronov/shortener/internal/app/utils"
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"go.uber.org/zap"
-	"io"
-	"net/http"
 )
 
 const (
 	shortKeyLength = 8
 )
 
+// Handler реализует HTTP-хендлеры для работы с сокращёнными ссылками
 type Handler struct {
 	config  *config.Config
 	storage storage.Storage
 }
 
+// NewHandler создаёт и возвращает новый экземпляр Handler
 func NewHandler(config *config.Config, s storage.Storage) (*Handler, error) {
 	return &Handler{
 		config:  config,
@@ -32,11 +36,14 @@ func NewHandler(config *config.Config, s storage.Storage) (*Handler, error) {
 	}, nil
 }
 
+// WriteURL сохраняет переданную структуру ShortenerURL в хранилище и возвращает сгенерированную ссылку
 func (h *Handler) WriteURL(ctx context.Context, url storage.ShortenerURL) (string, error) {
 	logger.Log.Info("Writing URL", zap.String("url", url.ShortURL))
 	return h.storage.Create(ctx, url)
 }
 
+// CreateLinkHandle обрабатывает POST-запрос с text/plain и создаёт сокращённый URL.
+// Возвращает 201 Created и короткий URL в теле ответа.
 func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
 	if !ok {
@@ -106,6 +113,8 @@ func (h *Handler) CreateLinkHandle(res http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// GetLinkHandle обрабатывает GET-запрос для получения оригинального URL по ключу.
+// Перенаправляет пользователя на исходный адрес или возвращает 404/410
 func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
 	logger.Log.Info("GetLinkHandle", zap.String("url", req.URL.String()))
 	key := chi.URLParam(req, "key")
@@ -126,6 +135,8 @@ func (h *Handler) GetLinkHandle(res http.ResponseWriter, req *http.Request) {
 	http.Redirect(res, req, link, http.StatusTemporaryRedirect)
 }
 
+// CreateJSONLinkHandle обрабатывает POST-запрос с JSON-телом и создаёт сокращённый URL.
+// Возвращает 201 Created и JSON-ответ с результатом
 func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Request) {
 	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
 
@@ -209,6 +220,8 @@ func (h *Handler) CreateJSONLinkHandle(res http.ResponseWriter, req *http.Reques
 	}
 }
 
+// CreateBatchJSONLinkHandle обрабатывает POST-запрос с массивом URL в формате JSON.
+// Создаёт сокращённые ссылки пакетно и возвращает массив результатов
 func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.Request) {
 	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
 
@@ -279,6 +292,8 @@ func (h *Handler) CreateBatchJSONLinkHandle(res http.ResponseWriter, req *http.R
 	}
 }
 
+// GetUserLinksHandle возвращает список всех сокращённых URL, созданных авторизованным пользователем.
+// Возвращает 200 OK и JSON-ответ или 204, если список пуст
 func (h *Handler) GetUserLinksHandle(res http.ResponseWriter, req *http.Request) {
 	userID, ok := req.Context().Value(contextkeys.UserIDKey).(string)
 
@@ -313,6 +328,8 @@ func (h *Handler) GetUserLinksHandle(res http.ResponseWriter, req *http.Request)
 	}
 }
 
+// DeleteLinksHandle обрабатывает асинхронное удаление ссылок по списку ID для авторизованного пользователя.
+// Возвращает 202 Accepted
 func (h *Handler) DeleteLinksHandle(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value(contextkeys.UserIDKey).(string)
 

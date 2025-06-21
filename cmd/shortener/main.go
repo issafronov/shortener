@@ -5,6 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
+	"time"
+
+	_ "net/http/pprof"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/issafronov/shortener/internal/app/config"
@@ -13,13 +19,12 @@ import (
 	"github.com/issafronov/shortener/internal/middleware/auth"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
+	"github.com/issafronov/shortener/internal/pprof"
 	_ "github.com/jackc/pgx/stdlib"
-	"net/http"
-	"os"
-	"time"
 )
 
 func main() {
+	pprof.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	conf := config.LoadConfig()
@@ -32,6 +37,7 @@ func main() {
 	}
 }
 
+// Router возвращает настроенный маршрутизатор chi с подключёнными middleware и обработчиками
 func Router(config *config.Config, s storage.Storage) chi.Router {
 	router := chi.NewRouter()
 
