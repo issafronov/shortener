@@ -73,7 +73,7 @@ func main() {
 		analyzers = append(analyzers, asciicheck.NewAnalyzer())
 		seen[asciicheck.NewAnalyzer().Name] = true
 	}
-	
+
 	if !seen[noosexit.Analyzer.Name] {
 		analyzers = append(analyzers, noosexit.Analyzer)
 		seen[noosexit.Analyzer.Name] = true
