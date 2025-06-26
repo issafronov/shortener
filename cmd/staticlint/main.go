@@ -47,7 +47,6 @@ func main() {
 	var analyzers []*analysis.Analyzer
 	seen := make(map[string]bool)
 
-	// Добавляем стандартные анализаторы
 	stdAnalyzers := []*analysis.Analyzer{
 		printf.Analyzer,
 		structtag.Analyzer,
@@ -60,7 +59,6 @@ func main() {
 		seen[a.Name] = true
 	}
 
-	// Добавляем SA-анализаторы + один из других классов без повторов
 	for _, a := range staticcheck.Analyzers {
 		name := a.Analyzer.Name
 		if strings.HasPrefix(name, "SA") || name == "shadow" {
@@ -71,13 +69,11 @@ func main() {
 		}
 	}
 
-	// Добавляем публичный анализатор
 	if !seen[asciicheck.NewAnalyzer().Name] {
 		analyzers = append(analyzers, asciicheck.NewAnalyzer())
 		seen[asciicheck.NewAnalyzer().Name] = true
 	}
-
-	// Добавляем свой анализатор
+	
 	if !seen[noosexit.Analyzer.Name] {
 		analyzers = append(analyzers, noosexit.Analyzer)
 		seen[noosexit.Analyzer.Name] = true
