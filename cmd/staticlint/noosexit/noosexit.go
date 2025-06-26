@@ -7,6 +7,8 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+// Analyzer реализует анализатор, который запрещает использование os.Exit
+// в функции main пакета main.
 var Analyzer = &analysis.Analyzer{
 	Name: "noosexit",
 	Doc:  "запрещает прямое использование os.Exit в функции main пакета main",
