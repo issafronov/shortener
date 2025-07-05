@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/issafronov/shortener/internal/app/config"
@@ -187,4 +190,103 @@ func TestGzipCompression(t *testing.T) {
 		_, err = io.ReadAll(zr)
 		require.NoError(t, err)
 	})
+}
+
+// helper для создания временного файла с данными
+func createTestStorageFile(t *testing.T, data []storage.ShortenerURL) string {
+	tmpFile, err := os.CreateTemp("", "test_storage_*.json")
+	require.NoError(t, err)
+	for _, d := range data {
+		line, _ := json.Marshal(d)
+		tmpFile.Write(append(line, '\n'))
+	}
+	tmpFile.Close()
+	return tmpFile.Name()
+}
+
+func Test_restoreStorage(t *testing.T) {
+	// подготовка: запишем пару ссылок в файл
+	testData := []storage.ShortenerURL{
+		{ShortURL: "abc123", OriginalURL: "https://example.com"},
+		{ShortURL: "xyz789", OriginalURL: "https://test.com"},
+	}
+	path := createTestStorageFile(t, testData)
+	defer os.Remove(path)
+
+	cfg := &config.Config{FileStoragePath: path}
+	storage.Urls = make(map[string]storage.ShortenerURL)
+
+	err := restoreStorage(cfg)
+	require.NoError(t, err)
+	assert.Len(t, storage.Urls, 2)
+	assert.Equal(t, "https://example.com", storage.Urls["abc123"].OriginalURL)
+}
+
+func Test_getOrNA(t *testing.T) {
+	assert.Equal(t, "N/A", getOrNA(""))
+	assert.Equal(t, "value", getOrNA("value"))
+}
+
+func Test_printBuildInfo(t *testing.T) {
+	buildVersion = "v1.0.0"
+	buildDate = "2025-01-01"
+	buildCommit = "abcdef"
+
+	// Просто убедимся, что функция не падает
+	printBuildInfo()
+}
+
+func Test_Router(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "storage-*.json")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	cfg := &config.Config{
+		LoggerLevel:     "info",
+		FileStoragePath: tmpFile.Name(),
+	}
+
+	s, err := storage.NewFileStorage(cfg)
+	require.NoError(t, err)
+
+	router := Router(cfg, s)
+	assert.NotNil(t, router)
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func Test_runServer_FileStorage(t *testing.T) {
+	cfg := &config.Config{
+		FileStoragePath: "test_runserver.json",
+		ServerAddress:   "127.0.0.1:9999",
+	}
+	defer os.Remove(cfg.FileStoragePath)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	go func() {
+		err := runServer(cfg, ctx)
+		assert.NoError(t, err)
+	}()
+
+	time.Sleep(500 * time.Millisecond) // ждем сервер
+	resp, err := http.Get("http://" + cfg.ServerAddress + "/ping")
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	resp.Body.Close()
+}
+
+func Test_runServer_InvalidDB(t *testing.T) {
+	cfg := &config.Config{
+		DatabaseDSN:   "invalid-dsn",
+		ServerAddress: "127.0.0.1:0", // any available port
+	}
+	ctx := context.Background()
+	err := runServer(cfg, ctx)
+	assert.Error(t, err)
 }

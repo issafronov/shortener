@@ -23,7 +23,14 @@ import (
 	_ "github.com/jackc/pgx/stdlib"
 )
 
+var (
+	buildVersion string
+	buildDate    string
+	buildCommit  string
+)
+
 func main() {
+	printBuildInfo()
 	pprof.Start()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -103,4 +110,17 @@ func restoreStorage(config *config.Config) error {
 		storage.Urls[shortenerURL.ShortURL] = shortenerURL
 	}
 	return file.Close()
+}
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\n", getOrNA(buildVersion))
+	fmt.Printf("Build date: %s\n", getOrNA(buildDate))
+	fmt.Printf("Build commit: %s\n", getOrNA(buildCommit))
+}
+
+func getOrNA(value string) string {
+	if value == "" {
+		return "N/A"
+	}
+	return value
 }
