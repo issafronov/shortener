@@ -76,6 +76,7 @@ func runServer(cfg *config.Config, ctx context.Context) error {
 	fmt.Println("Running server on", cfg.ServerAddress)
 	var s storage.Storage
 	var err error
+
 	if cfg.DatabaseDSN != "" {
 		pgStorage, err := storage.NewPostgresStorage(ctx, cfg.DatabaseDSN)
 		if err != nil {
@@ -88,7 +89,25 @@ func runServer(cfg *config.Config, ctx context.Context) error {
 			return fmt.Errorf("failed to initialize file storage: %w", err)
 		}
 	}
-	return http.ListenAndServe(cfg.ServerAddress, Router(cfg, s))
+	router := Router(cfg, s)
+
+	if cfg.EnableHTTPS {
+		certFile := "cert.pem"
+		keyFile := "key.pem"
+
+		if _, err := os.Stat(certFile); os.IsNotExist(err) {
+			return fmt.Errorf("certificate file %s not found", certFile)
+		}
+		if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+			return fmt.Errorf("key file %s not found", keyFile)
+		}
+
+		fmt.Println("Starting HTTPS server on", cfg.ServerAddress)
+		return http.ListenAndServeTLS(cfg.ServerAddress, certFile, keyFile, router)
+	}
+
+	fmt.Println("Starting HTTP server on", cfg.ServerAddress)
+	return http.ListenAndServe(cfg.ServerAddress, router)
 }
 
 func restoreStorage(config *config.Config) error {
