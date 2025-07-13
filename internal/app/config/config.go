@@ -13,7 +13,7 @@ type Config struct {
 	LoggerLevel     string `env:"LOG_LEVEL" envDefault:"info"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH" envDefault:"internal/app/storage/storage.json"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
-	EnableHTTPS     bool   `env:"ENABLE_HTTPS" envDefault:"true"`
+	EnableHTTPS     bool   `env:"ENABLE_HTTPS"`
 }
 
 // LoadConfig загружает конфигурацию из переменных окружения и флагов командной строки
