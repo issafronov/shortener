@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	_ "net/http/pprof"
@@ -32,16 +34,40 @@ var (
 func main() {
 	printBuildInfo()
 	pprof.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	conf := config.LoadConfig()
 
 	if err := restoreStorage(conf); err != nil {
 		panic(err)
 	}
-	if err := runServer(conf, ctx); err != nil {
-		panic(err)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		if err := runServer(conf, ctx, serverErr); err != nil {
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case sig := <-sigChan:
+		fmt.Printf("Received signal: %v\n", sig)
+		cancel()
+
+		_, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+
+		fmt.Println("Shutting down server gracefully...")
+
+	case err := <-serverErr:
+		fmt.Printf("Server error: %v\n", err)
+		cancel()
 	}
+
+	fmt.Println("Server shutdown completed")
 }
 
 // Router возвращает настроенный маршрутизатор chi с подключёнными middleware и обработчиками
@@ -72,7 +98,7 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	return router
 }
 
-func runServer(cfg *config.Config, ctx context.Context) error {
+func runServer(cfg *config.Config, ctx context.Context, serverErr chan<- error) error {
 	fmt.Println("Running server on", cfg.ServerAddress)
 	var s storage.Storage
 	var err error
@@ -90,24 +116,48 @@ func runServer(cfg *config.Config, ctx context.Context) error {
 		}
 	}
 	router := Router(cfg, s)
-
-	if cfg.EnableHTTPS {
-		certFile := "cert.pem"
-		keyFile := "key.pem"
-
-		if _, err := os.Stat(certFile); os.IsNotExist(err) {
-			return fmt.Errorf("certificate file %s not found", certFile)
-		}
-		if _, err := os.Stat(keyFile); os.IsNotExist(err) {
-			return fmt.Errorf("key file %s not found", keyFile)
-		}
-
-		fmt.Println("Starting HTTPS server on", cfg.ServerAddress)
-		return http.ListenAndServeTLS(cfg.ServerAddress, certFile, keyFile, router)
+	server := &http.Server{
+		Addr:    cfg.ServerAddress,
+		Handler: router,
 	}
 
-	fmt.Println("Starting HTTP server on", cfg.ServerAddress)
-	return http.ListenAndServe(cfg.ServerAddress, router)
+	go func() {
+		var err error
+		if cfg.EnableHTTPS {
+			certFile := "cert.pem"
+			keyFile := "key.pem"
+
+			if _, err := os.Stat(certFile); os.IsNotExist(err) {
+				serverErr <- fmt.Errorf("certificate file %s not found", certFile)
+				return
+			}
+			if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+				serverErr <- fmt.Errorf("key file %s not found", keyFile)
+				return
+			}
+
+			fmt.Println("Starting HTTPS server on", cfg.ServerAddress)
+			err = server.ListenAndServeTLS(certFile, keyFile)
+		} else {
+			fmt.Println("Starting HTTP server on", cfg.ServerAddress)
+			err = server.ListenAndServe()
+		}
+
+		if err != nil && err != http.ErrServerClosed {
+			serverErr <- err
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server shutdown failed: %w", err)
+	}
+
+	return nil
 }
 
 func restoreStorage(config *config.Config) error {

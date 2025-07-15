@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -266,11 +268,16 @@ func Test_runServer_FileStorage(t *testing.T) {
 	}
 	defer os.Remove(cfg.FileStoragePath)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	serverErr := make(chan error, 1)
+
 	go func() {
-		err := runServer(cfg, ctx)
+		err := runServer(cfg, ctx, serverErr)
 		assert.NoError(t, err)
 	}()
 
@@ -286,7 +293,12 @@ func Test_runServer_InvalidDB(t *testing.T) {
 		DatabaseDSN:   "invalid-dsn",
 		ServerAddress: "127.0.0.1:0", // any available port
 	}
-	ctx := context.Background()
-	err := runServer(cfg, ctx)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	serverErr := make(chan error, 1)
+	err := runServer(cfg, ctx, serverErr)
 	assert.Error(t, err)
 }
