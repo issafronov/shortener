@@ -88,6 +88,7 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 	fmt.Println("Running server on", cfg.ServerAddress)
 
 	serverCtx, stop := context.WithCancel(parentCtx)
+	defer stop()
 
 	var s storage.Storage
 	var err error
