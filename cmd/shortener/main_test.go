@@ -9,15 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/issafronov/shortener/internal/app/config"
-	"github.com/issafronov/shortener/internal/app/contextkeys"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
@@ -65,7 +63,6 @@ func TestCreateLinkHandle(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			client := resty.New()
-
 			res, err := client.R().
 				SetHeader("Content-Type", "text/plain").
 				SetBody(tc.body).
@@ -74,7 +71,7 @@ func TestCreateLinkHandle(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tc.expectedCode, res.StatusCode())
 			assert.Equal(t, tc.contentType, res.Header().Get("Content-Type"))
-			assert.NotEmpty(t, strings.TrimSpace(string(res.Body())), "Expected non-empty short URL")
+			assert.NotEmpty(t, strings.TrimSpace(string(res.Body())))
 		})
 	}
 }
@@ -84,9 +81,8 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 	conf.FileStoragePath = "testStorage.json"
 	s, _ := storage.NewFileStorage(conf)
 	h, err := handlers.NewHandler(conf, s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = testutils.WithTestUserContext(r, utils.CreateShortKey(10))
 		h.CreateJSONLinkHandle(w, r)
@@ -94,38 +90,16 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
-	testCases := []struct {
-		name         string
-		method       string
-		body         string
-		expectedCode int
-		contentType  string
-	}{
-		{
-			name:         "method_post_success",
-			method:       http.MethodPost,
-			body:         `{"url": "https://www.google.com"}`,
-			expectedCode: http.StatusCreated,
-			contentType:  "application/json",
-		},
-	}
-	for _, test := range testCases {
-		t.Run(test.name, func(t *testing.T) {
-			req := resty.New().R()
-			req.Method = test.method
-			req.URL = srv.URL
+	t.Run("method_post_success", func(t *testing.T) {
+		res, err := resty.New().R().
+			SetHeader("Content-Type", "application/json").
+			SetBody(`{"url": "https://www.google.com"}`).
+			Post(srv.URL)
 
-			if len(test.body) > 0 {
-				req.SetHeader("Content-Type", "application/json")
-				req.SetBody(test.body)
-			}
-
-			res, err := req.Send()
-			assert.NoError(t, err, "error making HTTP request")
-			assert.Equal(t, test.expectedCode, res.StatusCode(), "Response code didn't match expected")
-			assert.Equal(t, test.contentType, res.Header().Get("Content-Type"))
-		})
-	}
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusCreated, res.StatusCode())
+		assert.Equal(t, "application/json", res.Header().Get("Content-Type"))
+	})
 }
 
 func TestGzipCompression(t *testing.T) {
@@ -133,9 +107,8 @@ func TestGzipCompression(t *testing.T) {
 	conf.FileStoragePath = "testStorage.json"
 	s, _ := storage.NewFileStorage(conf)
 	h, err := handlers.NewHandler(conf, s)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+
 	handler := compress.GzipMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = testutils.WithTestUserContext(r, utils.CreateShortKey(10))
 		h.CreateJSONLinkHandle(w, r)
@@ -150,41 +123,34 @@ func TestGzipCompression(t *testing.T) {
 		zb := gzip.NewWriter(buf)
 		_, err := zb.Write([]byte(requestBody))
 		require.NoError(t, err)
-		err = zb.Close()
+		require.NoError(t, zb.Close())
+
+		req, err := http.NewRequest("POST", srv.URL, buf)
 		require.NoError(t, err)
 
-		r := httptest.NewRequest("POST", srv.URL, buf)
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, contextkeys.UserIDKey, "testUserID")
-		r = r.WithContext(ctx)
-		r.RequestURI = ""
-		r.Header.Set("Content-Encoding", "gzip")
-		r.Header.Set("Accept-Encoding", "")
+		req.Header.Set("Content-Encoding", "gzip")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept-Encoding", "")
 
-		resp, err := http.DefaultClient.Do(r)
+		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-		_, err = io.ReadAll(resp.Body)
 		defer resp.Body.Close()
-
-		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
 	})
 
 	t.Run("accepts_gzip", func(t *testing.T) {
 		buf := bytes.NewBufferString(requestBody)
-		r := httptest.NewRequest("POST", srv.URL, buf)
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, contextkeys.UserIDKey, "testUserID")
-		r = r.WithContext(ctx)
-		r.RequestURI = ""
-		r.Header.Set("Accept-Encoding", "gzip")
 
-		resp, err := http.DefaultClient.Do(r)
+		req, err := http.NewRequest("POST", srv.URL, buf)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
 
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept-Encoding", "gzip")
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
 		defer resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		zr, err := gzip.NewReader(resp.Body)
 		require.NoError(t, err)
@@ -194,7 +160,6 @@ func TestGzipCompression(t *testing.T) {
 	})
 }
 
-// helper для создания временного файла с данными
 func createTestStorageFile(t *testing.T, data []storage.ShortenerURL) string {
 	tmpFile, err := os.CreateTemp("", "test_storage_*.json")
 	require.NoError(t, err)
@@ -207,7 +172,6 @@ func createTestStorageFile(t *testing.T, data []storage.ShortenerURL) string {
 }
 
 func Test_restoreStorage(t *testing.T) {
-	// подготовка: запишем пару ссылок в файл
 	testData := []storage.ShortenerURL{
 		{ShortURL: "abc123", OriginalURL: "https://example.com"},
 		{ShortURL: "xyz789", OriginalURL: "https://test.com"},
@@ -234,7 +198,6 @@ func Test_printBuildInfo(t *testing.T) {
 	buildDate = "2025-01-01"
 	buildCommit = "abcdef"
 
-	// Просто убедимся, что функция не падает
 	printBuildInfo()
 }
 
@@ -264,41 +227,39 @@ func Test_Router(t *testing.T) {
 func Test_runServer_FileStorage(t *testing.T) {
 	cfg := &config.Config{
 		FileStoragePath: "test_runserver.json",
-		ServerAddress:   "127.0.0.1:9999",
+		ServerAddress:   "127.0.0.1:8085",
 	}
 	defer os.Remove(cfg.FileStoragePath)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-
-	serverErr := make(chan error, 1)
+	var wg sync.WaitGroup
 
 	go func() {
-		err := runServer(cfg, ctx, serverErr)
+		err := runServer(cfg, ctx, &wg)
 		assert.NoError(t, err)
 	}()
 
-	time.Sleep(500 * time.Millisecond) // ждем сервер
+	time.Sleep(500 * time.Millisecond)
+
 	resp, err := http.Get("http://" + cfg.ServerAddress + "/ping")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
+
+	cancel()
+	wg.Wait()
 }
 
 func Test_runServer_InvalidDB(t *testing.T) {
 	cfg := &config.Config{
 		DatabaseDSN:   "invalid-dsn",
-		ServerAddress: "127.0.0.1:0", // any available port
+		ServerAddress: "127.0.0.1:0",
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
+	var wg sync.WaitGroup
 
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	serverErr := make(chan error, 1)
-	err := runServer(cfg, ctx, serverErr)
+	err := runServer(cfg, ctx, &wg)
 	assert.Error(t, err)
 }

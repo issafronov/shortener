@@ -1,8 +1,8 @@
 {
-    "server_address": "localhost:8081",
+    "server_address": "localhost:8080",
     "base_url": "http://example.com",
     "log_level": "debug",
     "file_storage_path": "/tmp/storage.json",
     "database_dsn": "postgres://user:password@localhost:5432/shortener",
-    "enable_https": true
+    "enable_https": false
 }
