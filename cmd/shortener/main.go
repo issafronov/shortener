@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	_ "net/http/pprof"
@@ -32,16 +35,25 @@ var (
 func main() {
 	printBuildInfo()
 	pprof.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
 	conf := config.LoadConfig()
 
 	if err := restoreStorage(conf); err != nil {
 		panic(err)
 	}
-	if err := runServer(conf, ctx); err != nil {
-		panic(err)
+
+	var wg sync.WaitGroup
+
+	if err := runServer(conf, ctx, &wg); err != nil {
+		fmt.Printf("Server error: %v\n", err)
 	}
+
+	wg.Wait()
+
+	fmt.Println("Server shutdown completed")
 }
 
 // Router возвращает настроенный маршрутизатор chi с подключёнными middleware и обработчиками
@@ -72,12 +84,17 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	return router
 }
 
-func runServer(cfg *config.Config, ctx context.Context) error {
+func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup) error {
 	fmt.Println("Running server on", cfg.ServerAddress)
+
+	serverCtx, stop := context.WithCancel(parentCtx)
+	defer stop()
+
 	var s storage.Storage
 	var err error
+
 	if cfg.DatabaseDSN != "" {
-		pgStorage, err := storage.NewPostgresStorage(ctx, cfg.DatabaseDSN)
+		pgStorage, err := storage.NewPostgresStorage(serverCtx, cfg.DatabaseDSN)
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}
@@ -88,7 +105,31 @@ func runServer(cfg *config.Config, ctx context.Context) error {
 			return fmt.Errorf("failed to initialize file storage: %w", err)
 		}
 	}
-	return http.ListenAndServe(cfg.ServerAddress, Router(cfg, s))
+	router := Router(cfg, s)
+	server := &http.Server{
+		Addr:    cfg.ServerAddress,
+		Handler: router,
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := startHTTPServer(cfg, server); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("Server error: %v\n", err)
+			stop()
+		}
+	}()
+
+	<-serverCtx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("server shutdown failed: %w", err)
+	}
+
+	return nil
 }
 
 func restoreStorage(config *config.Config) error {
@@ -123,4 +164,24 @@ func getOrNA(value string) string {
 		return "N/A"
 	}
 	return value
+}
+
+func startHTTPServer(cfg *config.Config, server *http.Server) error {
+	if cfg.EnableHTTPS {
+		certFile := "cert.pem"
+		keyFile := "key.pem"
+
+		if _, err := os.Stat(certFile); os.IsNotExist(err) {
+			return fmt.Errorf("certificate file %s not found", certFile)
+		}
+		if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+			return fmt.Errorf("key file %s not found", keyFile)
+		}
+
+		fmt.Println("Starting HTTPS server on", cfg.ServerAddress)
+		return server.ListenAndServeTLS(certFile, keyFile)
+	}
+
+	fmt.Println("Starting HTTP server on", cfg.ServerAddress)
+	return server.ListenAndServe()
 }
