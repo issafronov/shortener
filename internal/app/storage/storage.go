@@ -45,6 +45,8 @@ type Storage interface {
 	GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error)
 	Ping(ctx context.Context) error
 	DeleteURLs(ctx context.Context, userID string, urls []string) error
+	CountURLs(ctx context.Context) (int64, error)
+	CountUsers(ctx context.Context) (int64, error)
 }
 
 // FileStorage реализует интерфейс Storage с использованием файлового хранилища
@@ -113,6 +115,14 @@ func (f *FileStorage) DeleteURLs(ctx context.Context, userID string, ids []strin
 		}
 	}
 	return nil
+}
+
+func (f *FileStorage) CountURLs(ctx context.Context) (int64, error) {
+	return int64(len(Urls)), nil
+}
+
+func (f *FileStorage) CountUsers(ctx context.Context) (int64, error) {
+	return int64(len(UsersUrls)), nil
 }
 
 // NewFileStorage создаёт экземпляр FileStorage с указанием пути до файла
@@ -254,4 +264,22 @@ func (s *PostgresStorage) DeleteURLs(ctx context.Context, userID string, urls []
 	}
 
 	return tx.Commit()
+}
+
+func (s *PostgresStorage) CountURLs(ctx context.Context) (int64, error) {
+	var count int64
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM urls WHERE is_deleted = FALSE").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (s *PostgresStorage) CountUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT user_id) FROM urls").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }

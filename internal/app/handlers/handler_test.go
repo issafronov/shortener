@@ -24,6 +24,8 @@ type mockStorage struct {
 	GetByUserFunc  func(ctx context.Context, userID string) ([]models.ShortURLResponse, error)
 	DeleteURLsFunc func(ctx context.Context, userID string, ids []string) error
 	PingFunc       func(ctx context.Context) error
+	CountURLsFunc  func(ctx context.Context) (int64, error)
+	CountUsersFunc func(ctx context.Context) (int64, error)
 }
 
 func (m *mockStorage) Create(ctx context.Context, url storage.ShortenerURL) (string, error) {
@@ -47,6 +49,14 @@ func (m *mockStorage) Ping(ctx context.Context) error {
 		return m.PingFunc(ctx)
 	}
 	return nil
+}
+
+func (m *mockStorage) CountURLs(ctx context.Context) (int64, error) {
+	return m.CountURLsFunc(ctx)
+}
+
+func (m *mockStorage) CountUsers(ctx context.Context) (int64, error) {
+	return m.CountUsersFunc(ctx)
 }
 
 func TestCreateJSONLinkHandle(t *testing.T) {
@@ -274,4 +284,38 @@ func TestGetUserLinksHandle_OK(t *testing.T) {
 	res := w.Result()
 	defer res.Body.Close()
 	assert.Equal(t, http.StatusOK, res.StatusCode)
+}
+
+func TestInternalStats(t *testing.T) {
+	cfg := &config.Config{}
+	storage := &mockStorage{
+		CountURLsFunc: func(ctx context.Context) (int64, error) {
+			return 42, nil
+		},
+		CountUsersFunc: func(ctx context.Context) (int64, error) {
+			return 10, nil
+		},
+	}
+	h, _ := handlers.NewHandler(cfg, storage)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/internal/stats", nil)
+	// симулируем доверенный IP через middleware, просто передаём напрямую
+	w := httptest.NewRecorder()
+
+	h.InternalStats(w, req)
+
+	res := w.Result()
+	defer res.Body.Close()
+
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+
+	var stats struct {
+		URLs  int64 `json:"urls"`
+		Users int64 `json:"users"`
+	}
+
+	err := json.NewDecoder(res.Body).Decode(&stats)
+	assert.NoError(t, err)
+	assert.Equal(t, int64(42), stats.URLs)
+	assert.Equal(t, int64(10), stats.Users)
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/issafronov/shortener/internal/middleware/auth"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
+	"github.com/issafronov/shortener/internal/middleware/trustedsubnet"
 	"github.com/issafronov/shortener/internal/pprof"
 	_ "github.com/jackc/pgx/stdlib"
 )
@@ -81,6 +82,12 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	router.Get("/ping", handler.Ping)
 	router.Get("/api/user/urls", handler.GetUserLinksHandle)
 	router.Delete("/api/user/urls", handler.DeleteLinksHandle)
+
+	router.Group(func(r chi.Router) {
+		r.Use(trustedsubnet.TrustedSubnetMiddleware(handler.TrustedSubnet))
+		r.Get("/api/internal/stats", handler.InternalStats)
+	})
+
 	return router
 }
 
