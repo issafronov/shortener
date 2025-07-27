@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -24,15 +25,26 @@ const (
 
 // Handler реализует HTTP-хендлеры для работы с сокращёнными ссылками
 type Handler struct {
-	config  *config.Config
-	storage storage.Storage
+	config        *config.Config
+	storage       storage.Storage
+	TrustedSubnet *net.IPNet
 }
 
 // NewHandler создаёт и возвращает новый экземпляр Handler
 func NewHandler(config *config.Config, s storage.Storage) (*Handler, error) {
+	var subnet *net.IPNet
+	if config.TrustedSubnet != "" {
+		_, parsedSubnet, err := net.ParseCIDR(config.TrustedSubnet)
+		if err != nil {
+			return nil, err
+		}
+		subnet = parsedSubnet
+	}
+
 	return &Handler{
-		config:  config,
-		storage: s,
+		config:        config,
+		storage:       s,
+		TrustedSubnet: subnet,
 	}, nil
 }
 
@@ -375,4 +387,34 @@ func (h *Handler) DeleteLinksHandle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+// InternalStats получает статистику
+// Доступ разрешён только из доверенной подсети
+func (h *Handler) InternalStats(w http.ResponseWriter, r *http.Request) {
+	urlsCount, err := h.storage.CountURLs(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to get URLs count", http.StatusInternalServerError)
+		return
+	}
+
+	usersCount, err := h.storage.CountUsers(r.Context())
+	if err != nil {
+		http.Error(w, "Failed to get Users count", http.StatusInternalServerError)
+		return
+	}
+
+	stats := struct {
+		URLs  int64 `json:"urls"`
+		Users int64 `json:"users"`
+	}{
+		URLs:  urlsCount,
+		Users: usersCount,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }

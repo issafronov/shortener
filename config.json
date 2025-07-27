@@ -4,5 +4,6 @@
     "log_level": "debug",
     "file_storage_path": "/tmp/storage.json",
     "database_dsn": "postgres://user:password@localhost:5432/shortener",
-    "enable_https": false
+    "enable_https": false,
+    "trusted_subnet": "192.168.1.0/24"
 }

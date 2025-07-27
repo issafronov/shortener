@@ -32,6 +32,13 @@ func (m *mockStorageWithPing) GetByUser(ctx context.Context, userID string) ([]m
 func (m *mockStorageWithPing) DeleteURLs(ctx context.Context, userID string, ids []string) error {
 	return nil
 }
+func (m *mockStorageWithPing) CountURLs(ctx context.Context) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockStorageWithPing) CountUsers(ctx context.Context) (int64, error) {
+	return 0, nil
+}
 
 func TestPing_Success(t *testing.T) {
 	storage := &mockStorageWithPing{

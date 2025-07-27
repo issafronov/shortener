@@ -17,6 +17,7 @@ type Config struct {
 	DatabaseDSN     string `json:"database_dsn" env:"DATABASE_DSN"`
 	EnableHTTPS     bool   `json:"enable_https" env:"ENABLE_HTTPS"`
 	ConfigFile      string `json:"-" env:"CONFIG"`
+	TrustedSubnet   string `json:"trusted_subnet" env:"TRUSTED_SUBNET"`
 }
 
 // LoadConfig загружает конфигурацию из переменных окружения и флагов командной строки или JSON конфиг файла
@@ -50,6 +51,8 @@ func ParseFlags(config *Config) {
 	flag.StringVar(&config.FileStoragePath, "f", config.FileStoragePath, "file storage path")
 	flag.StringVar(&config.DatabaseDSN, "d", config.DatabaseDSN, "database DSN")
 	flag.BoolVar(&config.EnableHTTPS, "s", config.EnableHTTPS, "enable HTTPS")
+	flag.StringVar(&config.TrustedSubnet, "t", config.TrustedSubnet, "trusted subnet in CIDR format")
+
 	flag.Parse()
 }
 
@@ -105,5 +108,8 @@ func mergeConfigs(dst, src *Config) {
 	}
 	if src.EnableHTTPS && dst.isDefault("EnableHTTPS") {
 		dst.EnableHTTPS = src.EnableHTTPS
+	}
+	if src.TrustedSubnet != "" && dst.TrustedSubnet == "" {
+		dst.TrustedSubnet = src.TrustedSubnet
 	}
 }
