@@ -117,10 +117,12 @@ func (f *FileStorage) DeleteURLs(ctx context.Context, userID string, ids []strin
 	return nil
 }
 
+// CountURLs возвращает количество всех сохранённых URL в хранилище.
 func (f *FileStorage) CountURLs(ctx context.Context) (int64, error) {
 	return int64(len(Urls)), nil
 }
 
+// CountUsers возвращает количество пользователей в хранилище.
 func (f *FileStorage) CountUsers(ctx context.Context) (int64, error) {
 	return int64(len(UsersUrls)), nil
 }
@@ -266,6 +268,7 @@ func (s *PostgresStorage) DeleteURLs(ctx context.Context, userID string, urls []
 	return tx.Commit()
 }
 
+// CountURLs возвращает количество всех сохранённых URL в хранилище.
 func (s *PostgresStorage) CountURLs(ctx context.Context) (int64, error) {
 	var count int64
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM urls WHERE is_deleted = FALSE").Scan(&count)
@@ -275,6 +278,7 @@ func (s *PostgresStorage) CountURLs(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
+// CountUsers возвращает количество пользователей в хранилище.
 func (s *PostgresStorage) CountUsers(ctx context.Context) (int64, error) {
 	var count int64
 	err := s.db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT user_id) FROM urls").Scan(&count)
