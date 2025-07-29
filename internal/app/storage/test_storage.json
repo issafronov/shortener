@@ -18,3 +18,6 @@
 {"uuid":3,"correlation_id":"","short_url":"oXMj33Cn","original_url":"https://example.com","user_id":"user1","is_deleted":false}
 {"uuid":3,"correlation_id":"","short_url":"a9UUg7X4","original_url":"https://example.com","user_id":"user1","is_deleted":false}
 {"uuid":3,"correlation_id":"","short_url":"nU8F2HrO","original_url":"https://example.com","user_id":"user1","is_deleted":false}
+{"uuid":0,"correlation_id":"","short_url":"abc123","original_url":"https://example.com","user_id":"user1","is_deleted":false}
+{"uuid":0,"correlation_id":"","short_url":"abc123","original_url":"https://example.com","user_id":"user1","is_deleted":false}
+{"uuid":0,"correlation_id":"","short_url":"abc123","original_url":"https://example.com","user_id":"user1","is_deleted":false}

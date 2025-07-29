@@ -9,46 +9,18 @@ import (
 
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
-	"github.com/issafronov/shortener/internal/app/models"
-	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/stretchr/testify/assert"
 )
 
-type mockStorageWithPing struct {
-	PingFunc func(ctx context.Context) error
-}
-
-func (m *mockStorageWithPing) Ping(ctx context.Context) error {
-	return m.PingFunc(ctx)
-}
-
-func (m *mockStorageWithPing) Create(ctx context.Context, url storage.ShortenerURL) (string, error) {
-	return "", nil
-}
-func (m *mockStorageWithPing) Get(ctx context.Context, key string) (string, error) { return "", nil }
-func (m *mockStorageWithPing) GetByUser(ctx context.Context, userID string) ([]models.ShortURLResponse, error) {
-	return nil, nil
-}
-func (m *mockStorageWithPing) DeleteURLs(ctx context.Context, userID string, ids []string) error {
-	return nil
-}
-func (m *mockStorageWithPing) CountURLs(ctx context.Context) (int64, error) {
-	return 0, nil
-}
-
-func (m *mockStorageWithPing) CountUsers(ctx context.Context) (int64, error) {
-	return 0, nil
-}
-
 func TestPing_Success(t *testing.T) {
-	storage := &mockStorageWithPing{
+	svc := &mockService{
 		PingFunc: func(ctx context.Context) error {
 			return nil
 		},
 	}
 
 	cfg := &config.Config{}
-	h, _ := handlers.NewHandler(cfg, storage)
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	w := httptest.NewRecorder()
@@ -61,14 +33,14 @@ func TestPing_Success(t *testing.T) {
 }
 
 func TestPing_Failure(t *testing.T) {
-	storage := &mockStorageWithPing{
+	svc := &mockService{
 		PingFunc: func(ctx context.Context) error {
 			return errors.New("db connection failed")
 		},
 	}
 
 	cfg := &config.Config{}
-	h, _ := handlers.NewHandler(cfg, storage)
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	w := httptest.NewRecorder()

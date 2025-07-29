@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
+	"github.com/issafronov/shortener/internal/app/service"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/middleware/auth"
 	"github.com/issafronov/shortener/internal/middleware/compress"
@@ -58,7 +59,7 @@ func main() {
 }
 
 // Router возвращает настроенный маршрутизатор chi с подключёнными middleware и обработчиками
-func Router(config *config.Config, s storage.Storage) chi.Router {
+func Router(config *config.Config, s service.Service) chi.Router {
 	router := chi.NewRouter()
 
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
@@ -97,7 +98,8 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 	serverCtx, stop := context.WithCancel(parentCtx)
 	defer stop()
 
-	var s storage.Storage
+	var st storage.Storage
+	var srv service.Service
 	var err error
 
 	if cfg.DatabaseDSN != "" {
@@ -105,14 +107,15 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}
-		s = pgStorage
+		st = pgStorage
 	} else {
-		s, err = storage.NewFileStorage(cfg)
+		st, err = storage.NewFileStorage(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to initialize file storage: %w", err)
 		}
 	}
-	router := Router(cfg, s)
+	srv = service.NewService(st)
+	router := Router(cfg, srv)
 	server := &http.Server{
 		Addr:    cfg.ServerAddress,
 		Handler: router,

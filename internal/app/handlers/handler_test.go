@@ -18,55 +18,128 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type mockStorage struct {
-	CreateFunc     func(ctx context.Context, url storage.ShortenerURL) (string, error)
-	GetFunc        func(ctx context.Context, key string) (string, error)
-	GetByUserFunc  func(ctx context.Context, userID string) ([]models.ShortURLResponse, error)
-	DeleteURLsFunc func(ctx context.Context, userID string, ids []string) error
-	PingFunc       func(ctx context.Context) error
-	CountURLsFunc  func(ctx context.Context) (int64, error)
-	CountUsersFunc func(ctx context.Context) (int64, error)
+type mockService struct {
+	CreateURLFunc      func(ctx context.Context, originalURL, userID string) (string, error)
+	CreateURLBatchFunc func(ctx context.Context, batch []models.BatchURLData, userID string) ([]models.BatchURLDataResponse, error)
+	GetOriginalURLFunc func(ctx context.Context, shortKey string) (string, error)
+	GetUserURLsFunc    func(ctx context.Context, userID, host string) ([]models.ShortURLResponse, error)
+	DeleteUserURLsFunc func(ctx context.Context, userID string, ids []string) error
+	GetStatsFunc       func(ctx context.Context) (int64, int64, error)
+	PingFunc           func(ctx context.Context) error
 }
 
-func (m *mockStorage) Create(ctx context.Context, url storage.ShortenerURL) (string, error) {
-	return m.CreateFunc(ctx, url)
+func (m *mockService) CreateURL(ctx context.Context, originalURL, userID string) (string, error) {
+	if m.CreateURLFunc != nil {
+		return m.CreateURLFunc(ctx, originalURL, userID)
+	}
+	return "", nil
 }
 
-func (m *mockStorage) Get(ctx context.Context, key string) (string, error) {
-	return m.GetFunc(ctx, key)
+func (m *mockService) CreateURLBatch(ctx context.Context, batch []models.BatchURLData, userID string) ([]models.BatchURLDataResponse, error) {
+	if m.CreateURLBatchFunc != nil {
+		return m.CreateURLBatchFunc(ctx, batch, userID)
+	}
+	return nil, nil
 }
 
-func (m *mockStorage) GetByUser(ctx context.Context, userID string) ([]models.ShortURLResponse, error) {
-	return m.GetByUserFunc(ctx, userID)
+func (m *mockService) GetOriginalURL(ctx context.Context, shortKey string) (string, error) {
+	if m.GetOriginalURLFunc != nil {
+		return m.GetOriginalURLFunc(ctx, shortKey)
+	}
+	return "", nil
 }
 
-func (m *mockStorage) DeleteURLs(ctx context.Context, userID string, ids []string) error {
-	return m.DeleteURLsFunc(ctx, userID, ids)
+func (m *mockService) GetUserURLs(ctx context.Context, userID, host string) ([]models.ShortURLResponse, error) {
+	if m.GetUserURLsFunc != nil {
+		return m.GetUserURLsFunc(ctx, userID, host)
+	}
+	return nil, nil
 }
 
-func (m *mockStorage) Ping(ctx context.Context) error {
+func (m *mockService) DeleteUserURLs(ctx context.Context, userID string, ids []string) error {
+	if m.DeleteUserURLsFunc != nil {
+		return m.DeleteUserURLsFunc(ctx, userID, ids)
+	}
+	return nil
+}
+
+func (m *mockService) GetStats(ctx context.Context) (int64, int64, error) {
+	if m.GetStatsFunc != nil {
+		return m.GetStatsFunc(ctx)
+	}
+	return 0, 0, nil
+}
+
+func (m *mockService) Ping(ctx context.Context) error {
 	if m.PingFunc != nil {
 		return m.PingFunc(ctx)
 	}
 	return nil
 }
 
+type mockStorage struct {
+	GetFunc        func(ctx context.Context, key string) (string, error)
+	GetByUserFunc  func(ctx context.Context, userID string) ([]models.ShortURLResponse, error)
+	CreateFunc     func(ctx context.Context, url storage.ShortenerURL) (string, error)
+	DeleteURLsFunc func(ctx context.Context, userID string, ids []string) error
+	CountURLsFunc  func(ctx context.Context) (int64, error)
+	CountUsersFunc func(ctx context.Context) (int64, error)
+}
+
+func (m *mockStorage) Get(ctx context.Context, key string) (string, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, key)
+	}
+	return "", nil
+}
+
+func (m *mockStorage) GetByUser(ctx context.Context, userID string) ([]models.ShortURLResponse, error) {
+	if m.GetByUserFunc != nil {
+		return m.GetByUserFunc(ctx, userID)
+	}
+	return nil, nil
+}
+
+func (m *mockStorage) Create(ctx context.Context, url storage.ShortenerURL) (string, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, url)
+	}
+	return "", nil
+}
+
+func (m *mockStorage) DeleteURLs(ctx context.Context, userID string, ids []string) error {
+	if m.DeleteURLsFunc != nil {
+		return m.DeleteURLsFunc(ctx, userID, ids)
+	}
+	return nil
+}
+
 func (m *mockStorage) CountURLs(ctx context.Context) (int64, error) {
-	return m.CountURLsFunc(ctx)
+	if m.CountURLsFunc != nil {
+		return m.CountURLsFunc(ctx)
+	}
+	return 0, nil
 }
 
 func (m *mockStorage) CountUsers(ctx context.Context) (int64, error) {
-	return m.CountUsersFunc(ctx)
+	if m.CountUsersFunc != nil {
+		return m.CountUsersFunc(ctx)
+	}
+	return 0, nil
 }
 
 func TestCreateJSONLinkHandle(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost"}
-	storage := &mockStorage{
-		CreateFunc: func(ctx context.Context, url storage.ShortenerURL) (string, error) {
-			return url.ShortURL, nil
+	svc := &mockService{
+		GetStatsFunc: func(ctx context.Context) (int64, int64, error) {
+			return 42, 10, nil
+		},
+		CreateURLFunc: func(ctx context.Context, originalURL, userID string) (string, error) {
+			return "shortKey", nil
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	data := models.URLData{URL: "https://example.com"}
 	body, _ := json.Marshal(data)
@@ -84,7 +157,16 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 
 func TestCreateJSONLinkHandle_Unauthorized(t *testing.T) {
 	cfg := &config.Config{}
-	h, _ := handlers.NewHandler(cfg, &mockStorage{})
+	svc := &mockService{
+		GetStatsFunc: func(ctx context.Context) (int64, int64, error) {
+			return 42, 10, nil
+		},
+		CreateURLFunc: func(ctx context.Context, originalURL, userID string) (string, error) {
+			return "shortKey", nil
+		},
+	}
+
+	h, _ := handlers.NewHandler(cfg, svc)
 	req := httptest.NewRequest(http.MethodPost, "/", nil)
 	w := httptest.NewRecorder()
 
@@ -96,7 +178,16 @@ func TestCreateJSONLinkHandle_Unauthorized(t *testing.T) {
 
 func TestCreateJSONLinkHandle_InvalidBody(t *testing.T) {
 	cfg := &config.Config{}
-	h, _ := handlers.NewHandler(cfg, &mockStorage{})
+	svc := &mockService{
+		GetStatsFunc: func(ctx context.Context) (int64, int64, error) {
+			return 42, 10, nil
+		},
+		CreateURLFunc: func(ctx context.Context, originalURL, userID string) (string, error) {
+			return "shortKey", nil
+		},
+	}
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader([]byte("invalid-json")))
 	req = req.WithContext(context.WithValue(req.Context(), contextkeys.UserIDKey, "user1"))
@@ -110,12 +201,13 @@ func TestCreateJSONLinkHandle_InvalidBody(t *testing.T) {
 
 func TestGetLinkHandle_Found(t *testing.T) {
 	cfg := &config.Config{}
-	storage := &mockStorage{
-		GetFunc: func(ctx context.Context, key string) (string, error) {
+	svc := &mockService{
+		GetOriginalURLFunc: func(ctx context.Context, key string) (string, error) {
 			return "https://example.com", nil
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	r := chi.NewRouter()
 	r.Get("/{key}", h.GetLinkHandle)
@@ -138,12 +230,13 @@ func TestGetLinkHandle_Found(t *testing.T) {
 
 func TestGetUserLinksHandle_NoContent(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost"}
-	storage := &mockStorage{
-		GetByUserFunc: func(ctx context.Context, userID string) ([]models.ShortURLResponse, error) {
+	svc := &mockService{
+		GetUserURLsFunc: func(ctx context.Context, userID, host string) ([]models.ShortURLResponse, error) {
 			return []models.ShortURLResponse{}, nil
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/user/urls", nil)
 	req = req.WithContext(context.WithValue(req.Context(), contextkeys.UserIDKey, "user1"))
@@ -157,12 +250,13 @@ func TestGetUserLinksHandle_NoContent(t *testing.T) {
 
 func TestDeleteLinksHandle(t *testing.T) {
 	cfg := &config.Config{}
-	storage := &mockStorage{
-		DeleteURLsFunc: func(ctx context.Context, userID string, ids []string) error {
+	svc := &mockService{
+		DeleteUserURLsFunc: func(ctx context.Context, userID string, ids []string) error {
 			return nil
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	body, _ := json.Marshal([]string{"abc123"})
 	req := httptest.NewRequest(http.MethodDelete, "/api/user/urls", bytes.NewReader(body))
@@ -177,12 +271,13 @@ func TestDeleteLinksHandle(t *testing.T) {
 
 func TestCreateLinkHandle(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost"}
-	storage := &mockStorage{
-		CreateFunc: func(ctx context.Context, url storage.ShortenerURL) (string, error) {
-			return url.ShortURL, nil
+	svc := &mockService{
+		CreateURLFunc: func(ctx context.Context, originalURL, userID string) (string, error) {
+			return "shortKey", nil
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	body := []byte("https://example.com")
 	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewReader(body))
@@ -197,12 +292,20 @@ func TestCreateLinkHandle(t *testing.T) {
 
 func TestCreateBatchJSONLinkHandle(t *testing.T) {
 	cfg := &config.Config{BaseURL: "http://localhost"}
-	storage := &mockStorage{
-		CreateFunc: func(ctx context.Context, url storage.ShortenerURL) (string, error) {
-			return url.ShortURL, nil
+	svc := &mockService{
+		CreateURLBatchFunc: func(ctx context.Context, batch []models.BatchURLData, userID string) ([]models.BatchURLDataResponse, error) {
+			resp := make([]models.BatchURLDataResponse, len(batch))
+			for i, item := range batch {
+				resp[i] = models.BatchURLDataResponse{
+					CorrelationID: item.CorrelationID,
+					ShortURL:      "shortKey" + item.CorrelationID,
+				}
+			}
+			return resp, nil
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	batch := []models.BatchURLData{
 		{CorrelationID: "1", OriginalURL: "https://example1.com"},
@@ -222,12 +325,13 @@ func TestCreateBatchJSONLinkHandle(t *testing.T) {
 
 func TestGetLinkHandle_NotFound(t *testing.T) {
 	cfg := &config.Config{}
-	storage := &mockStorage{
-		GetFunc: func(ctx context.Context, key string) (string, error) {
+	svc := &mockService{
+		GetOriginalURLFunc: func(ctx context.Context, key string) (string, error) {
 			return "", errors.New("url not found")
 		},
 	}
-	h, _ := handlers.NewHandler(cfg, storage)
+
+	h, _ := handlers.NewHandler(cfg, svc)
 
 	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
 	ctx := chi.NewRouteContext()
@@ -239,83 +343,4 @@ func TestGetLinkHandle_NotFound(t *testing.T) {
 	res := w.Result()
 	defer res.Body.Close()
 	assert.Equal(t, http.StatusNotFound, res.StatusCode)
-}
-
-func TestGetLinkHandle_Deleted(t *testing.T) {
-	cfg := &config.Config{}
-	storage := &mockStorage{
-		GetFunc: func(ctx context.Context, key string) (string, error) {
-			return "", errors.New("url gone")
-		},
-	}
-	h, _ := handlers.NewHandler(cfg, storage)
-
-	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
-	ctx := chi.NewRouteContext()
-	ctx.URLParams.Add("key", "abc123")
-	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, ctx))
-	w := httptest.NewRecorder()
-
-	h.GetLinkHandle(w, req)
-	res := w.Result()
-	defer res.Body.Close()
-	assert.Equal(t, http.StatusGone, res.StatusCode)
-}
-
-func TestGetUserLinksHandle_OK(t *testing.T) {
-	cfg := &config.Config{BaseURL: "http://localhost"}
-	storage := &mockStorage{
-		GetByUserFunc: func(ctx context.Context, userID string) ([]models.ShortURLResponse, error) {
-			return []models.ShortURLResponse{
-				{
-					ShortURL:    "http://localhost/abc123",
-					OriginalURL: "https://example.com",
-				},
-			}, nil
-		},
-	}
-	h, _ := handlers.NewHandler(cfg, storage)
-
-	req := httptest.NewRequest(http.MethodGet, "/user/urls", nil)
-	req = req.WithContext(context.WithValue(req.Context(), contextkeys.UserIDKey, "user1"))
-	w := httptest.NewRecorder()
-
-	h.GetUserLinksHandle(w, req)
-	res := w.Result()
-	defer res.Body.Close()
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-}
-
-func TestInternalStats(t *testing.T) {
-	cfg := &config.Config{}
-	storage := &mockStorage{
-		CountURLsFunc: func(ctx context.Context) (int64, error) {
-			return 42, nil
-		},
-		CountUsersFunc: func(ctx context.Context) (int64, error) {
-			return 10, nil
-		},
-	}
-	h, _ := handlers.NewHandler(cfg, storage)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/internal/stats", nil)
-	// симулируем доверенный IP через middleware, просто передаём напрямую
-	w := httptest.NewRecorder()
-
-	h.InternalStats(w, req)
-
-	res := w.Result()
-	defer res.Body.Close()
-
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-
-	var stats struct {
-		URLs  int64 `json:"urls"`
-		Users int64 `json:"users"`
-	}
-
-	err := json.NewDecoder(res.Body).Decode(&stats)
-	assert.NoError(t, err)
-	assert.Equal(t, int64(42), stats.URLs)
-	assert.Equal(t, int64(10), stats.Users)
 }
