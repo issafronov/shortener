@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/issafronov/shortener/internal/app/config"
+	"github.com/issafronov/shortener/internal/app/grpcserver"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/service"
 	"github.com/issafronov/shortener/internal/app/storage"
@@ -25,7 +27,10 @@ import (
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"github.com/issafronov/shortener/internal/middleware/trustedsubnet"
 	"github.com/issafronov/shortener/internal/pprof"
+	"github.com/issafronov/shortener/proto"
 	_ "github.com/jackc/pgx/stdlib"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var (
@@ -130,6 +135,15 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 		}
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := runGRPCServer(cfg, srv, serverCtx, wg); err != nil {
+			fmt.Printf("gRPC server error: %v\n", err)
+			stop()
+		}
+	}()
+
 	<-serverCtx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -194,4 +208,31 @@ func startHTTPServer(cfg *config.Config, server *http.Server) error {
 
 	fmt.Println("Starting HTTP server on", cfg.ServerAddress)
 	return server.ListenAndServe()
+}
+
+// runGRPCServer запускает grpc
+func runGRPCServer(cfg *config.Config, srv service.Service, ctx context.Context, wg *sync.WaitGroup) error {
+	lis, err := net.Listen("tcp", cfg.GRPCServerAddress)
+	if err != nil {
+		return fmt.Errorf("failed to listen on gRPC: %w", err)
+	}
+
+	grpcServer := grpc.NewServer()
+	proto.RegisterShortenerServer(grpcServer, grpcserver.NewGRPCHandler(srv, cfg))
+	reflection.Register(grpcServer)
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := grpcServer.Serve(lis); err != nil {
+			fmt.Printf("gRPC server error: %v\n", err)
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		grpcServer.GracefulStop()
+	}()
+
+	return nil
 }
