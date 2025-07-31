@@ -12,6 +12,7 @@ import (
 	"github.com/issafronov/shortener/internal/app/contextkeys"
 	"github.com/issafronov/shortener/internal/app/handlers"
 	"github.com/issafronov/shortener/internal/app/models"
+	"github.com/issafronov/shortener/internal/app/service"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"golang.org/x/net/context"
 )
@@ -19,13 +20,13 @@ import (
 // Example of creating a short link via CreateJSONLinkHandle.
 func ExampleHandler_CreateJSONLinkHandle() {
 	cfg := &config.Config{
-		BaseURL:         "http://localhost",
-		FileStoragePath: "../storage/test_storage.json",
+		BaseURL: "http://localhost",
 	}
-	store, _ := storage.NewFileStorage(cfg)
-	h, _ := handlers.NewHandler(cfg, store)
 
-	// Создаём JSON-запрос
+	svc := &mockService{}
+
+	h, _ := handlers.NewHandler(cfg, svc)
+
 	urlData := models.URLData{URL: "https://example.com"}
 	body, _ := json.Marshal(urlData)
 	req := httptest.NewRequest(http.MethodPost, "/api/shorten", bytes.NewBuffer(body))
@@ -48,7 +49,13 @@ func ExampleHandler_GetLinkHandle() {
 		FileStoragePath: "../storage/test_storage.json",
 	}
 	store, _ := storage.NewFileStorage(cfg)
-	h, _ := handlers.NewHandler(cfg, store)
+	svc := service.NewService(store)
+	h, _ := handlers.NewHandler(cfg, svc)
+
+	// Вставка ссылки через сервис (корректно)
+	shortURL := "abc123"
+	originalURL := "https://example.com"
+	userID := "user1"
 
 	// Предварительно добавим ссылку в хранилище
 	storage.Urls["abc123"] = storage.ShortenerURL{
@@ -57,14 +64,20 @@ func ExampleHandler_GetLinkHandle() {
 		UserID:      "user1",
 	}
 
+	_, _ = store.Create(context.Background(), storage.ShortenerURL{
+		ShortURL:    shortURL,
+		OriginalURL: originalURL,
+		UserID:      userID,
+	})
+
 	// Создаём запрос
-	req := httptest.NewRequest(http.MethodGet, "/abc123", nil)
-	req = req.WithContext(context.WithValue(req.Context(), contextkeys.UserIDKey, "user1"))
+	req := httptest.NewRequest(http.MethodGet, "/"+shortURL, nil)
+	req = req.WithContext(context.WithValue(req.Context(), contextkeys.UserIDKey, userID))
 	req = req.WithContext(context.WithValue(req.Context(), contextkeys.HostKey, "http://localhost"))
 
-	// Мокаем параметр маршрута chi
+	// Мокаем chi params
 	routeCtx := chi.NewRouteContext()
-	routeCtx.URLParams.Add("key", "abc123")
+	routeCtx.URLParams.Add("key", shortURL)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))
 
 	w := httptest.NewRecorder()
@@ -75,6 +88,7 @@ func ExampleHandler_GetLinkHandle() {
 
 	fmt.Println("Status:", resp.StatusCode)
 	fmt.Println("Location:", resp.Header.Get("Location"))
+
 	// Output:
 	// Status: 307
 	// Location: https://example.com

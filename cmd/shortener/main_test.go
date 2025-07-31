@@ -17,6 +17,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/issafronov/shortener/internal/app/config"
 	"github.com/issafronov/shortener/internal/app/handlers"
+	"github.com/issafronov/shortener/internal/app/service"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/app/utils"
 	"github.com/issafronov/shortener/internal/middleware/compress"
@@ -29,11 +30,34 @@ func init() {
 	storage.Urls = map[string]storage.ShortenerURL{}
 }
 
+func createTempFile(t *testing.T, data []byte) string {
+	tmpFile, err := os.CreateTemp("", "test_storage_*.json")
+	require.NoError(t, err)
+
+	tmpFile.Truncate(0)
+
+	if data != nil {
+		_, err = tmpFile.Write(data)
+		require.NoError(t, err)
+	}
+
+	err = tmpFile.Close()
+	require.NoError(t, err)
+
+	return tmpFile.Name()
+}
+
 func TestCreateLinkHandle(t *testing.T) {
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	conf := &config.Config{}
-	conf.FileStoragePath = "testStorage.json"
-	s, _ := storage.NewFileStorage(conf)
-	h, err := handlers.NewHandler(conf, s)
+	tmpFile := createTempFile(t, nil)
+	defer os.Remove(tmpFile)
+
+	conf.FileStoragePath = tmpFile
+	s, err := storage.NewFileStorage(conf)
+	require.NoError(t, err)
+	svc := service.NewService(s)
+	h, err := handlers.NewHandler(conf, svc)
 	require.NoError(t, err)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,10 +101,16 @@ func TestCreateLinkHandle(t *testing.T) {
 }
 
 func TestCreateJSONLinkHandle(t *testing.T) {
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	conf := &config.Config{}
-	conf.FileStoragePath = "testStorage.json"
-	s, _ := storage.NewFileStorage(conf)
-	h, err := handlers.NewHandler(conf, s)
+	tmpFile := createTempFile(t, nil)
+	defer os.Remove(tmpFile)
+
+	conf.FileStoragePath = tmpFile
+	s, err := storage.NewFileStorage(conf)
+	require.NoError(t, err)
+	svc := service.NewService(s)
+	h, err := handlers.NewHandler(conf, svc)
 	require.NoError(t, err)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,10 +133,16 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	conf := &config.Config{}
-	conf.FileStoragePath = "testStorage.json"
-	s, _ := storage.NewFileStorage(conf)
-	h, err := handlers.NewHandler(conf, s)
+	tmpFile := createTempFile(t, nil)
+	defer os.Remove(tmpFile)
+
+	conf.FileStoragePath = tmpFile
+	s, err := storage.NewFileStorage(conf)
+	require.NoError(t, err)
+	svc := service.NewService(s)
+	h, err := handlers.NewHandler(conf, svc)
 	require.NoError(t, err)
 
 	handler := compress.GzipMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -202,19 +238,20 @@ func Test_printBuildInfo(t *testing.T) {
 }
 
 func Test_Router(t *testing.T) {
-	tmpFile, err := os.CreateTemp("", "storage-*.json")
-	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	tmpFile := createTempFile(t, nil)
+	defer os.Remove(tmpFile)
 
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	cfg := &config.Config{
 		LoggerLevel:     "info",
-		FileStoragePath: tmpFile.Name(),
+		FileStoragePath: tmpFile,
 	}
 
 	s, err := storage.NewFileStorage(cfg)
 	require.NoError(t, err)
+	svc := service.NewService(s)
 
-	router := Router(cfg, s)
+	router := Router(cfg, svc)
 	assert.NotNil(t, router)
 
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
@@ -225,11 +262,14 @@ func Test_Router(t *testing.T) {
 }
 
 func Test_runServer_FileStorage(t *testing.T) {
+	tmpFile := createTempFile(t, nil)
+	defer os.Remove(tmpFile)
+
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	cfg := &config.Config{
-		FileStoragePath: "test_runserver.json",
+		FileStoragePath: tmpFile,
 		ServerAddress:   "127.0.0.1:8085",
 	}
-	defer os.Remove(cfg.FileStoragePath)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

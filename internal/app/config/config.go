@@ -10,13 +10,15 @@ import (
 
 // Config содержит все конфигурационные параметры приложения
 type Config struct {
-	ServerAddress   string `json:"server_address" env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
-	BaseURL         string `json:"base_url" env:"BASE_URL" envDefault:"http://localhost:8080"`
-	LoggerLevel     string `json:"log_level" env:"LOG_LEVEL" envDefault:"info"`
-	FileStoragePath string `json:"file_storage_path" env:"FILE_STORAGE_PATH" envDefault:"internal/app/storage/storage.json"`
-	DatabaseDSN     string `json:"database_dsn" env:"DATABASE_DSN"`
-	EnableHTTPS     bool   `json:"enable_https" env:"ENABLE_HTTPS"`
-	ConfigFile      string `json:"-" env:"CONFIG"`
+	ServerAddress     string `json:"server_address" env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
+	BaseURL           string `json:"base_url" env:"BASE_URL" envDefault:"http://localhost:8080"`
+	LoggerLevel       string `json:"log_level" env:"LOG_LEVEL" envDefault:"info"`
+	FileStoragePath   string `json:"file_storage_path" env:"FILE_STORAGE_PATH" envDefault:"internal/app/storage/storage.json"`
+	DatabaseDSN       string `json:"database_dsn" env:"DATABASE_DSN"`
+	EnableHTTPS       bool   `json:"enable_https" env:"ENABLE_HTTPS"`
+	ConfigFile        string `json:"-" env:"CONFIG"`
+	TrustedSubnet     string `json:"trusted_subnet" env:"TRUSTED_SUBNET"`
+	GRPCServerAddress string `json:"grpc_server_address" env:"GRPC_SERVER_ADDRESS" envDefault:"localhost:50051"`
 }
 
 // LoadConfig загружает конфигурацию из переменных окружения и флагов командной строки или JSON конфиг файла
@@ -50,6 +52,9 @@ func ParseFlags(config *Config) {
 	flag.StringVar(&config.FileStoragePath, "f", config.FileStoragePath, "file storage path")
 	flag.StringVar(&config.DatabaseDSN, "d", config.DatabaseDSN, "database DSN")
 	flag.BoolVar(&config.EnableHTTPS, "s", config.EnableHTTPS, "enable HTTPS")
+	flag.StringVar(&config.TrustedSubnet, "t", config.TrustedSubnet, "trusted subnet in CIDR format")
+	flag.StringVar(&config.GRPCServerAddress, "g", config.GRPCServerAddress, "grpc address and port to run server")
+
 	flag.Parse()
 }
 
@@ -82,6 +87,8 @@ func (c *Config) isDefault(field string) bool {
 		return c.DatabaseDSN == ""
 	case "EnableHTTPS":
 		return !c.EnableHTTPS
+	case "GRPCServerAddress":
+		return c.GRPCServerAddress == "localhost:50051"
 	default:
 		return false
 	}
@@ -105,5 +112,11 @@ func mergeConfigs(dst, src *Config) {
 	}
 	if src.EnableHTTPS && dst.isDefault("EnableHTTPS") {
 		dst.EnableHTTPS = src.EnableHTTPS
+	}
+	if src.TrustedSubnet != "" && dst.TrustedSubnet == "" {
+		dst.TrustedSubnet = src.TrustedSubnet
+	}
+	if src.GRPCServerAddress != "" && dst.isDefault("GRPCServerAddress") {
+		dst.GRPCServerAddress = src.GRPCServerAddress
 	}
 }

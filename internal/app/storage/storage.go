@@ -45,6 +45,8 @@ type Storage interface {
 	GetByUser(ctx context.Context, username string) ([]models.ShortURLResponse, error)
 	Ping(ctx context.Context) error
 	DeleteURLs(ctx context.Context, userID string, urls []string) error
+	CountURLs(ctx context.Context) (int64, error)
+	CountUsers(ctx context.Context) (int64, error)
 }
 
 // FileStorage реализует интерфейс Storage с использованием файлового хранилища
@@ -61,6 +63,15 @@ func (f *FileStorage) Ping(ctx context.Context) error {
 
 // Create сохраняет URL в файл
 func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) (string, error) {
+	if _, exists := Urls[url.ShortURL]; exists {
+		return "", ErrConflict
+	}
+
+	url.UUID = len(Urls) + 1
+
+	Urls[url.ShortURL] = url
+	UsersUrls[url.UserID] = append(UsersUrls[url.UserID], url.ShortURL)
+
 	data, err := json.Marshal(url)
 	if err != nil {
 		logger.Log.Info("Failed to marshal shortener URL", zap.Error(err))
@@ -74,7 +85,7 @@ func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) (string, err
 		logger.Log.Info("Error writing data new line", zap.Error(err))
 		return "", err
 	}
-	return "", f.writer.Flush()
+	return url.ShortURL, f.writer.Flush()
 }
 
 // Get возвращает оригинальный URL по сокращённому
@@ -113,6 +124,16 @@ func (f *FileStorage) DeleteURLs(ctx context.Context, userID string, ids []strin
 		}
 	}
 	return nil
+}
+
+// CountURLs возвращает количество всех сохранённых URL в хранилище.
+func (f *FileStorage) CountURLs(ctx context.Context) (int64, error) {
+	return int64(len(Urls)), nil
+}
+
+// CountUsers возвращает количество пользователей в хранилище.
+func (f *FileStorage) CountUsers(ctx context.Context) (int64, error) {
+	return int64(len(UsersUrls)), nil
 }
 
 // NewFileStorage создаёт экземпляр FileStorage с указанием пути до файла
@@ -254,4 +275,24 @@ func (s *PostgresStorage) DeleteURLs(ctx context.Context, userID string, urls []
 	}
 
 	return tx.Commit()
+}
+
+// CountURLs возвращает количество всех сохранённых URL в хранилище.
+func (s *PostgresStorage) CountURLs(ctx context.Context) (int64, error) {
+	var count int64
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM urls WHERE is_deleted = FALSE").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// CountUsers возвращает количество пользователей в хранилище.
+func (s *PostgresStorage) CountUsers(ctx context.Context) (int64, error) {
+	var count int64
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT user_id) FROM urls").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
