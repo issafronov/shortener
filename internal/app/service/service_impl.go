@@ -27,17 +27,12 @@ func NewService(storage storage.Storage) Service {
 // CreateURL создаёт сокращённый URL
 func (s *shortenerService) CreateURL(ctx context.Context, originalURL, userID string) (string, error) {
 	shortKey := utils.CreateShortKey(shortKeyLength)
-	uuid := len(storage.Urls) + 1
 
 	shortenerURL := storage.ShortenerURL{
-		UUID:        uuid,
 		ShortURL:    shortKey,
 		OriginalURL: originalURL,
 		UserID:      userID,
 	}
-
-	storage.Urls[shortKey] = shortenerURL
-	storage.UsersUrls[userID] = []string{shortKey, originalURL}
 
 	_, err := s.storage.Create(ctx, shortenerURL)
 	if err != nil {

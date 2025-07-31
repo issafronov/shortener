@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -17,26 +16,15 @@ import (
 
 // Handler обрабатывает входящие HTTP-запросы и взаимодействует с сервисным слоем.
 type Handler struct {
-	service       service.Service
-	config        *config.Config
-	TrustedSubnet *net.IPNet
+	service service.Service
+	config  *config.Config
 }
 
 // NewHandler создает новый экземпляр Handler.
 func NewHandler(cfg *config.Config, svc service.Service) (*Handler, error) {
-	var subnet *net.IPNet
-	if cfg.TrustedSubnet != "" {
-		_, parsedSubnet, err := net.ParseCIDR(cfg.TrustedSubnet)
-		if err != nil {
-			return nil, err
-		}
-		subnet = parsedSubnet
-	}
-
 	return &Handler{
-		config:        cfg,
-		service:       svc,
-		TrustedSubnet: subnet,
+		config:  cfg,
+		service: svc,
 	}, nil
 }
 

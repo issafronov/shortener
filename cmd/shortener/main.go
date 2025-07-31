@@ -90,7 +90,8 @@ func Router(config *config.Config, s service.Service) chi.Router {
 	router.Delete("/api/user/urls", handler.DeleteLinksHandle)
 
 	router.Group(func(r chi.Router) {
-		r.Use(trustedsubnet.TrustedSubnetMiddleware(handler.TrustedSubnet))
+		subnet := parseSubnet(config.TrustedSubnet)
+		r.Use(trustedsubnet.TrustedSubnetMiddleware(subnet))
 		r.Get("/api/internal/stats", handler.InternalStats)
 	})
 
@@ -138,7 +139,7 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if err := runGRPCServer(cfg, srv, serverCtx, wg); err != nil {
+		if err := runGRPCServer(cfg, srv, serverCtx); err != nil {
 			fmt.Printf("gRPC server error: %v\n", err)
 			stop()
 		}
@@ -211,7 +212,7 @@ func startHTTPServer(cfg *config.Config, server *http.Server) error {
 }
 
 // runGRPCServer запускает grpc
-func runGRPCServer(cfg *config.Config, srv service.Service, ctx context.Context, wg *sync.WaitGroup) error {
+func runGRPCServer(cfg *config.Config, srv service.Service, ctx context.Context) error {
 	lis, err := net.Listen("tcp", cfg.GRPCServerAddress)
 	if err != nil {
 		return fmt.Errorf("failed to listen on gRPC: %w", err)
@@ -221,18 +222,23 @@ func runGRPCServer(cfg *config.Config, srv service.Service, ctx context.Context,
 	proto.RegisterShortenerServer(grpcServer, grpcserver.NewGRPCHandler(srv, cfg))
 	reflection.Register(grpcServer)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := grpcServer.Serve(lis); err != nil {
-			fmt.Printf("gRPC server error: %v\n", err)
-		}
-	}()
-
 	go func() {
 		<-ctx.Done()
 		grpcServer.GracefulStop()
 	}()
 
-	return nil
+	fmt.Printf("Starting gRPC server on %s\n", cfg.GRPCServerAddress)
+	return grpcServer.Serve(lis)
+}
+
+func parseSubnet(cidr string) *net.IPNet {
+	if cidr == "" {
+		return nil
+	}
+	_, subnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		fmt.Printf("invalid trusted subnet: %v", err)
+		return nil
+	}
+	return subnet
 }

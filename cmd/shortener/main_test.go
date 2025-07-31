@@ -34,6 +34,8 @@ func createTempFile(t *testing.T, data []byte) string {
 	tmpFile, err := os.CreateTemp("", "test_storage_*.json")
 	require.NoError(t, err)
 
+	tmpFile.Truncate(0)
+
 	if data != nil {
 		_, err = tmpFile.Write(data)
 		require.NoError(t, err)
@@ -46,6 +48,7 @@ func createTempFile(t *testing.T, data []byte) string {
 }
 
 func TestCreateLinkHandle(t *testing.T) {
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	conf := &config.Config{}
 	tmpFile := createTempFile(t, nil)
 	defer os.Remove(tmpFile)
@@ -98,6 +101,7 @@ func TestCreateLinkHandle(t *testing.T) {
 }
 
 func TestCreateJSONLinkHandle(t *testing.T) {
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	conf := &config.Config{}
 	tmpFile := createTempFile(t, nil)
 	defer os.Remove(tmpFile)
@@ -129,6 +133,7 @@ func TestCreateJSONLinkHandle(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	conf := &config.Config{}
 	tmpFile := createTempFile(t, nil)
 	defer os.Remove(tmpFile)
@@ -236,6 +241,7 @@ func Test_Router(t *testing.T) {
 	tmpFile := createTempFile(t, nil)
 	defer os.Remove(tmpFile)
 
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	cfg := &config.Config{
 		LoggerLevel:     "info",
 		FileStoragePath: tmpFile,
@@ -259,6 +265,7 @@ func Test_runServer_FileStorage(t *testing.T) {
 	tmpFile := createTempFile(t, nil)
 	defer os.Remove(tmpFile)
 
+	storage.Urls = make(map[string]storage.ShortenerURL)
 	cfg := &config.Config{
 		FileStoragePath: tmpFile,
 		ServerAddress:   "127.0.0.1:8085",

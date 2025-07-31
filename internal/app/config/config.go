@@ -116,7 +116,7 @@ func mergeConfigs(dst, src *Config) {
 	if src.TrustedSubnet != "" && dst.TrustedSubnet == "" {
 		dst.TrustedSubnet = src.TrustedSubnet
 	}
-	if src.GRPCServerAddress != "" && dst.isDefault("GRPSServerAddress") {
+	if src.GRPCServerAddress != "" && dst.isDefault("GRPCServerAddress") {
 		dst.GRPCServerAddress = src.GRPCServerAddress
 	}
 }

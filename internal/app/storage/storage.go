@@ -63,6 +63,15 @@ func (f *FileStorage) Ping(ctx context.Context) error {
 
 // Create сохраняет URL в файл
 func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) (string, error) {
+	if _, exists := Urls[url.ShortURL]; exists {
+		return "", ErrConflict
+	}
+
+	url.UUID = len(Urls) + 1
+
+	Urls[url.ShortURL] = url
+	UsersUrls[url.UserID] = append(UsersUrls[url.UserID], url.ShortURL)
+
 	data, err := json.Marshal(url)
 	if err != nil {
 		logger.Log.Info("Failed to marshal shortener URL", zap.Error(err))
@@ -76,7 +85,7 @@ func (f *FileStorage) Create(ctx context.Context, url ShortenerURL) (string, err
 		logger.Log.Info("Error writing data new line", zap.Error(err))
 		return "", err
 	}
-	return "", f.writer.Flush()
+	return url.ShortURL, f.writer.Flush()
 }
 
 // Get возвращает оригинальный URL по сокращённому
