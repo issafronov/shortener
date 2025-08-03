@@ -1,19 +1,21 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/issafronov/shortener/internal/middleware/logger"
 	"go.uber.org/zap"
 )
 
-// Ping - handler для проверки работоспособности сервиса
-func (h *Handler) Ping(res http.ResponseWriter, req *http.Request) {
-	logger.Log.Info("PingHandle", zap.String("url", req.URL.String()))
-	if err := h.storage.Ping(req.Context()); err != nil {
-		res.WriteHeader(http.StatusServiceUnavailable)
-		fmt.Println(err.Error())
+// Ping - handler для проверки работоспособности сервиса.
+func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
+	logger.Log.Info("PingHandle", zap.String("url", r.URL.String()))
+
+	if err := h.service.Ping(r.Context()); err != nil {
+		logger.Log.Error("service ping failed", zap.Error(err))
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+		return
 	}
-	res.WriteHeader(http.StatusOK)
+
+	w.WriteHeader(http.StatusOK)
 }

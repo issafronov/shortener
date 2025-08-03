@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,13 +18,19 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/issafronov/shortener/internal/app/config"
+	"github.com/issafronov/shortener/internal/app/grpcserver"
 	"github.com/issafronov/shortener/internal/app/handlers"
+	"github.com/issafronov/shortener/internal/app/service"
 	"github.com/issafronov/shortener/internal/app/storage"
 	"github.com/issafronov/shortener/internal/middleware/auth"
 	"github.com/issafronov/shortener/internal/middleware/compress"
 	"github.com/issafronov/shortener/internal/middleware/logger"
+	"github.com/issafronov/shortener/internal/middleware/trustedsubnet"
 	"github.com/issafronov/shortener/internal/pprof"
+	"github.com/issafronov/shortener/proto"
 	_ "github.com/jackc/pgx/stdlib"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var (
@@ -57,7 +64,7 @@ func main() {
 }
 
 // Router возвращает настроенный маршрутизатор chi с подключёнными middleware и обработчиками
-func Router(config *config.Config, s storage.Storage) chi.Router {
+func Router(config *config.Config, s service.Service) chi.Router {
 	router := chi.NewRouter()
 
 	if err := logger.Initialize(config.LoggerLevel); err != nil {
@@ -81,6 +88,13 @@ func Router(config *config.Config, s storage.Storage) chi.Router {
 	router.Get("/ping", handler.Ping)
 	router.Get("/api/user/urls", handler.GetUserLinksHandle)
 	router.Delete("/api/user/urls", handler.DeleteLinksHandle)
+
+	router.Group(func(r chi.Router) {
+		subnet := parseSubnet(config.TrustedSubnet)
+		r.Use(trustedsubnet.TrustedSubnetMiddleware(subnet))
+		r.Get("/api/internal/stats", handler.InternalStats)
+	})
+
 	return router
 }
 
@@ -90,7 +104,8 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 	serverCtx, stop := context.WithCancel(parentCtx)
 	defer stop()
 
-	var s storage.Storage
+	var st storage.Storage
+	var srv service.Service
 	var err error
 
 	if cfg.DatabaseDSN != "" {
@@ -98,14 +113,15 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 		if err != nil {
 			return fmt.Errorf("failed to connect to database: %w", err)
 		}
-		s = pgStorage
+		st = pgStorage
 	} else {
-		s, err = storage.NewFileStorage(cfg)
+		st, err = storage.NewFileStorage(cfg)
 		if err != nil {
 			return fmt.Errorf("failed to initialize file storage: %w", err)
 		}
 	}
-	router := Router(cfg, s)
+	srv = service.NewService(st)
+	router := Router(cfg, srv)
 	server := &http.Server{
 		Addr:    cfg.ServerAddress,
 		Handler: router,
@@ -116,6 +132,15 @@ func runServer(cfg *config.Config, parentCtx context.Context, wg *sync.WaitGroup
 		defer wg.Done()
 		if err := startHTTPServer(cfg, server); err != nil && err != http.ErrServerClosed {
 			fmt.Printf("Server error: %v\n", err)
+			stop()
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := runGRPCServer(cfg, srv, serverCtx); err != nil {
+			fmt.Printf("gRPC server error: %v\n", err)
 			stop()
 		}
 	}()
@@ -184,4 +209,36 @@ func startHTTPServer(cfg *config.Config, server *http.Server) error {
 
 	fmt.Println("Starting HTTP server on", cfg.ServerAddress)
 	return server.ListenAndServe()
+}
+
+// runGRPCServer запускает grpc
+func runGRPCServer(cfg *config.Config, srv service.Service, ctx context.Context) error {
+	lis, err := net.Listen("tcp", cfg.GRPCServerAddress)
+	if err != nil {
+		return fmt.Errorf("failed to listen on gRPC: %w", err)
+	}
+
+	grpcServer := grpc.NewServer()
+	proto.RegisterShortenerServer(grpcServer, grpcserver.NewGRPCHandler(srv, cfg))
+	reflection.Register(grpcServer)
+
+	go func() {
+		<-ctx.Done()
+		grpcServer.GracefulStop()
+	}()
+
+	fmt.Printf("Starting gRPC server on %s\n", cfg.GRPCServerAddress)
+	return grpcServer.Serve(lis)
+}
+
+func parseSubnet(cidr string) *net.IPNet {
+	if cidr == "" {
+		return nil
+	}
+	_, subnet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		fmt.Printf("invalid trusted subnet: %v", err)
+		return nil
+	}
+	return subnet
 }
